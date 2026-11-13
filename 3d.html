@@ -1,0 +1,2794 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>지도 위에 피어나는 우리 동네 보물창고 — 참여형 3D 국가유산 웹 전시</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Noto Sans KR', 'Inter', sans-serif;
+      background-color: #0b1120;
+      color: #f8fafc;
+      overflow-x: hidden;
+      margin: 0;
+      padding: 0;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.4);
+      border-radius: 9999px;
+    }
+    .map-pin-label {
+      pointer-events: auto;
+      transform: translate(-50%, -100%);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .map-pin-label:hover {
+      transform: translate(-50%, -108%) scale(1.06);
+      z-index: 40;
+    }
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 12px rgba(250, 204, 21, 0.65), 0 0 24px rgba(234, 179, 8, 0.35); }
+      50% { box-shadow: 0 0 22px rgba(250, 204, 21, 0.95), 0 0 38px rgba(234, 179, 8, 0.65); }
+    }
+    .golden-aura-pin {
+      animation: pulseGlow 2.2s infinite ease-in-out;
+      border-color: #facc15 !important;
+    }
+  </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col select-none bg-slate-950 text-slate-100">
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toastContainer" class="fixed top-20 right-4 z-[90] flex flex-col gap-2 pointer-events-none max-w-sm w-full"></div>
+
+  <!-- 1. GLOBAL TOP NAVIGATION & GAMIFICATION BAR -->
+  <header class="relative z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-3 py-2.5 lg:px-5">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2.5">
+      <!-- Brand Title -->
+      <div class="flex items-center gap-2.5">
+        <button id="btnOpenIntroCharacter" type="button" class="flex items-center gap-2 text-left group focus:outline-none" title="캐릭터 및 인트로 다시 열기">
+          <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-orange-600 flex items-center justify-center shadow-md shadow-amber-500/20 text-slate-950 font-extrabold text-lg">
+            寶
+          </div>
+          <div>
+            <h1 class="text-sm sm:text-base font-extrabold tracking-tight text-white flex items-center gap-1.5">
+              우리 동네 3D 보물창고
+              <span class="hidden md:inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">참여형 국가유산 웹전시</span>
+            </h1>
+            <p class="text-[11px] text-slate-400 hidden sm:block">대한민국 3D 지도 위 문화·자연·무형유산 큐레이션</p>
+          </div>
+        </button>
+      </div>
+
+      <!-- Search & Category Filter Bar -->
+      <div class="flex flex-wrap items-center gap-1.5 flex-1 max-w-2xl justify-center">
+        <div class="relative flex-1 min-w-[140px] max-w-xs">
+          <input id="searchInput" type="text" placeholder="유산명, 동네(공주, 대전, 안동...), 태그 검색"
+            class="w-full bg-slate-800/90 text-xs text-white placeholder-slate-400 rounded-lg pl-7 pr-6 py-1.5 border border-slate-700 focus:border-amber-400 focus:outline-none" />
+          <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+          <button id="btnClearSearch" type="button" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs">✕</button>
+        </div>
+
+        <!-- Category Chips -->
+        <div class="flex items-center gap-1 bg-slate-800/80 p-1 rounded-lg border border-slate-700/80">
+          <button type="button" data-cat="all" class="cat-chip px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-500 text-slate-950 transition">전체</button>
+          <button type="button" data-cat="문화유산" class="cat-chip px-2.5 py-1 rounded-md text-xs font-semibold text-slate-300 hover:text-white transition">🏛️ 문화</button>
+          <button type="button" data-cat="자연유산" class="cat-chip px-2.5 py-1 rounded-md text-xs font-semibold text-slate-300 hover:text-white transition">🌲 자연</button>
+          <button type="button" data-cat="무형유산" class="cat-chip px-2.5 py-1 rounded-md text-xs font-semibold text-slate-300 hover:text-white transition">🎭 무형</button>
+        </div>
+
+        <!-- Region & Sort Selectors -->
+        <select id="regionSelect" aria-label="지역 필터" class="bg-slate-800/90 text-xs text-slate-200 rounded-lg px-2 py-1.5 border border-slate-700 focus:border-amber-400 focus:outline-none">
+          <option value="all">전국 지역</option>
+          <option value="충청">충청(대전·세종·충남·충북)</option>
+          <option value="경상">경상(부산·대구·울산·경북·경남)</option>
+          <option value="전라">전라(광주·전북·전남)</option>
+          <option value="제주">제주특별자치도</option>
+          <option value="서울·경기·인천">서울·경기·인천</option>
+          <option value="강원">강원특별자치도</option>
+        </select>
+
+        <select id="sortSelect" aria-label="정렬 기준" class="hidden xl:block bg-slate-800/90 text-xs text-slate-200 rounded-lg px-2 py-1.5 border border-slate-700 focus:border-amber-400 focus:outline-none">
+          <option value="popular">인기 공감순</option>
+          <option value="latest">최신 등록순</option>
+          <option value="comments">댓글 많은 순</option>
+        </select>
+      </div>
+
+      <!-- User Zodiac Profile + Stamps + Action Buttons -->
+      <div class="flex items-center gap-2">
+        <!-- 3-Category Stamp Mini Bar -->
+        <div class="hidden md:flex items-center gap-1 bg-slate-800/90 px-2.5 py-1 rounded-lg border border-slate-700" title="국가유산 3대 영역 균형 감상 스탬프 (문화·자연·무형 각 1점 이상 감상 시 +50P)">
+          <span class="text-[11px] text-slate-400 mr-0.5 font-medium">삼색도감</span>
+          <span id="stampCultural" class="text-[11px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 font-semibold">문화⚪</span>
+          <span id="stampNatural" class="text-[11px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 font-semibold">자연⚪</span>
+          <span id="stampIntangible" class="text-[11px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 font-semibold">무형⚪</span>
+        </div>
+
+        <!-- User Zodiac Avatar & Level Pill -->
+        <button id="btnOpenProfileModal" type="button" class="flex items-center gap-2 bg-slate-800 hover:bg-slate-700/90 border border-slate-700 px-2.5 py-1 rounded-xl transition" title="내 십이지신 생애주기 아이콘 변경 및 미션 확인">
+          <div id="headerAvatarContainer" class="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 border border-amber-400/60 bg-slate-900"></div>
+          <div class="text-left">
+            <div class="flex items-center gap-1">
+              <span id="headerUserNickname" class="text-xs font-bold text-white max-w-[80px] truncate">탐험가</span>
+              <span id="headerExcellenceBadge" class="hidden text-[10px]" title="우수 관람자 배지">🏅</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span id="headerUserLevel" class="text-[10px] font-semibold text-amber-400">Lv.1 마을 나그네</span>
+              <span id="headerUserPoints" class="text-[10px] font-bold px-1.5 py-0.2 bg-amber-500/20 text-amber-300 rounded">0P</span>
+            </div>
+          </div>
+        </button>
+
+        <!-- Mission & Reward Button -->
+        <button id="btnOpenMissionModal" type="button" class="px-2.5 py-1.5 rounded-xl bg-indigo-600/90 hover:bg-indigo-500 text-xs font-bold text-white border border-indigo-400/40 shadow-sm flex items-center gap-1 transition">
+          <span>🎁</span>
+          <span class="hidden sm:inline">미션·보상</span>
+          <span id="missionBadgeCount" class="px-1.5 py-0.2 text-[10px] rounded-full bg-amber-400 text-slate-950 font-extrabold">0/5</span>
+        </button>
+
+        <!-- Register 3D Heritage Button -->
+        <button id="btnOpenRegisterModal" type="button" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 text-xs font-extrabold shadow-md shadow-amber-500/20 flex items-center gap-1 transition">
+          <span>+ 3D 유산 자랑하기</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 2. MAIN WORKSPACE: 3D KOREA MAP + CURATION SLIDER -->
+  <main class="relative flex-1 w-full overflow-hidden flex flex-col justify-between">
+    <!-- Three.js 3D Map Canvas Container -->
+    <div id="mapCanvasContainer" class="absolute inset-0 w-full h-full z-0 cursor-grab active:cursor-grabbing"></div>
+
+    <!-- HTML Floating 3D Map Pin Labels Container -->
+    <div id="mapPinsOverlay" class="absolute inset-0 pointer-events-none z-10 overflow-hidden"></div>
+
+    <!-- Top-Left Map Legend & Quick Camera Controls -->
+    <div class="relative z-20 pointer-events-none p-3 sm:p-4 flex flex-wrap items-start justify-between gap-2">
+      <div class="pointer-events-auto bg-slate-900/85 backdrop-blur-md border border-slate-800 rounded-2xl p-3 shadow-xl max-w-xs">
+        <div class="flex items-center justify-between gap-2 mb-1.5">
+          <span class="text-xs font-bold text-amber-300 flex items-center gap-1">🧭 대한민국 3D 국가유산 지도</span>
+          <button id="btnOpenSourcesModal" type="button" class="text-[11px] text-slate-300 hover:text-amber-300 underline">출처·과제(MD)</button>
+        </div>
+        <p class="text-[11px] text-slate-300 leading-relaxed mb-2">
+          마우스 드래그(또는 터치)로 3D 지도를 회전·확대하고, 각 고을의 <strong class="text-white">3D 유산 마커</strong>를 눌러 360°로 감상해 보세요.
+        </p>
+        <div class="flex flex-wrap items-center gap-2 text-[11px]">
+          <span class="flex items-center gap-1 text-amber-300"><span class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></span>문화유산</span>
+          <span class="flex items-center gap-1 text-emerald-300"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block"></span>자연유산</span>
+          <span class="flex items-center gap-1 text-purple-300"><span class="w-2.5 h-2.5 rounded-full bg-purple-400 inline-block"></span>무형유산</span>
+          <span class="flex items-center gap-1 text-yellow-200"><span class="w-2.5 h-2.5 rounded-full border border-yellow-300 bg-yellow-400/40 inline-block"></span>✨황금후광</span>
+        </div>
+      </div>
+
+      <!-- Camera Reset & View Controls -->
+      <div class="pointer-events-auto flex items-center gap-1.5 bg-slate-900/85 backdrop-blur-md border border-slate-800 rounded-xl p-1.5 shadow-lg">
+        <button id="btnResetMapCamera" type="button" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 font-medium transition">
+          🇰🇷 한반도 전체 시점
+        </button>
+        <button id="btnToggleMapAutoRotate" type="button" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-amber-300 font-medium transition">
+          🔄 지도 회전: 켜짐
+        </button>
+      </div>
+    </div>
+
+    <!-- Bottom Curation Card Slider -->
+    <section class="relative z-20 pointer-events-auto bg-gradient-to-t from-slate-950 via-slate-950/95 to-transparent pt-6 pb-3 px-3 sm:px-6">
+      <div class="max-w-7xl mx-auto">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2">
+            <h2 class="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
+              <span>✨</span> 지역별 3D 유산 쇼케이스
+              <span id="filteredCountBadge" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-amber-300 border border-slate-700">5점</span>
+            </h2>
+            <span id="missionRecommendHint" class="text-[11px] text-emerald-300 hidden sm:inline-block">🎯 미감상 분류(문화·자연·무형)를 골고루 클릭해 삼색 도감 스탬프(+50P)를 완성해 보세요!</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <button id="btnSlidePrev" type="button" class="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center text-xs border border-slate-700">◀</button>
+            <button id="btnSlideNext" type="button" class="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center text-xs border border-slate-700">▶</button>
+          </div>
+        </div>
+
+        <div id="heritageCardsSlider" class="flex items-stretch gap-3 overflow-x-auto custom-scroll pb-1"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 3. INTRO & ZODIAC LIFECYCLE AVATAR CREATOR MODAL -->
+  <div id="introModal" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-3xl max-w-3xl w-full p-5 sm:p-7 shadow-2xl my-auto max-h-[92vh] overflow-y-auto custom-scroll">
+      <div class="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <span class="inline-block text-xs font-bold px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 mb-2">
+            참여형 3D 디지털 국가유산 웹 전시
+          </span>
+          <h2 class="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+            지도 위에 피어나는 우리 동네 보물창고
+          </h2>
+          <p class="text-xs sm:text-sm text-slate-300 mt-1 leading-relaxed">
+            당신의 동네에는 사람들에게 꼭 자랑하고 싶은 어떤 유산이 있나요? 나만의 <strong class="text-amber-300">십이지신(12간지) 생애주기 캐릭터</strong>를 만들고, 3D 지도 위에서 문화·자연·무형유산을 탐험하며 국가유산 수호패를 획득해 보세요!
+          </p>
+        </div>
+        <button id="btnCloseIntroModal" type="button" class="text-slate-400 hover:text-white text-lg px-2 py-1 rounded-lg bg-slate-800/80" title="닫기">✕</button>
+      </div>
+
+      <!-- Zodiac Avatar Maker Card -->
+      <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 sm:p-5 mb-5">
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
+          <!-- Left: Live Avatar Preview -->
+          <div class="md:col-span-4 flex flex-col items-center text-center bg-slate-900/90 border border-slate-800 rounded-2xl p-4">
+            <div class="text-[11px] font-semibold text-amber-300 mb-2">내 관람자 아이콘 미리보기</div>
+            <div id="introAvatarPreview" class="w-28 h-28 rounded-full overflow-hidden border-4 border-amber-400 shadow-lg shadow-amber-500/10 mb-3 bg-slate-950 flex items-center justify-center"></div>
+            <div id="introAvatarStageTitle" class="text-sm font-extrabold text-white">삐약삐약 노란 병아리</div>
+            <div id="introAvatarStageDesc" class="text-[11px] text-slate-400 mt-0.5">유(닭) · 1단계: 아기(유년기)</div>
+
+            <div class="w-full mt-3 pt-3 border-t border-slate-800">
+              <label for="introNicknameInput" class="block text-[11px] text-slate-400 mb-1 text-left">관람자 닉네임</label>
+              <input id="introNicknameInput" type="text" maxlength="12" value="우리동네탐험가"
+                class="w-full bg-slate-800 text-xs text-white font-bold px-3 py-2 rounded-lg border border-slate-700 focus:border-amber-400 focus:outline-none text-center" />
+            </div>
+          </div>
+
+          <!-- Right: 12 Zodiac Grid + 4 Lifecycle Stages + Frame Color + Accessory -->
+          <div class="md:col-span-8 flex flex-col gap-4">
+            <!-- Step 1: 12 Zodiac Animals -->
+            <div>
+              <label class="block text-xs font-bold text-slate-200 mb-2">
+                1. 십이지신(12간지) 동물 선택
+              </label>
+              <div id="zodiacAnimalGrid" class="grid grid-cols-4 sm:grid-cols-6 gap-1.5"></div>
+            </div>
+
+            <!-- Step 2: 4 Lifecycle Stages (Baby -> Youth -> Adult -> Elder) -->
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="text-xs font-bold text-slate-200">
+                  2. 생애주기(아기 시절 ~ 노년 현자) 모습 선택
+                </label>
+                <span class="text-[11px] text-amber-300 font-medium">원하는 성장 단계를 클릭하세요</span>
+              </div>
+              <div id="zodiacStageGrid" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+            </div>
+
+            <!-- Step 3: Obangsaek Frame & Traditional Accessories -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div>
+                <label class="block text-xs font-bold text-slate-200 mb-1.5">3. 오방색 배경 원형 프레임</label>
+                <div id="zodiacColorGrid" class="flex items-center gap-2"></div>
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-200 mb-1.5">4. 전통 소품 장식 (미션 해금 포함)</label>
+                <div id="zodiacAccessoryGrid" class="flex flex-wrap items-center gap-1.5"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom CTA Buttons -->
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="text-xs text-slate-400">
+          💡 캐릭터를 설정하면 <strong class="text-amber-300">준비 미션 0 (+20P)</strong>이 즉시 달성됩니다!
+        </div>
+        <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <button id="btnQuickRegisterFromIntro" type="button" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 transition">
+            내 3D 유산 바로 등록하기
+          </button>
+          <button id="btnConfirmIntroStart" type="button" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 text-xs sm:text-sm font-extrabold shadow-lg shadow-amber-500/25 transition">
+            이 캐릭터로 3D 전시 입장하기 (+20P)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. HERITAGE 3D DETAIL VIEWER & COMMUNICATION MODAL -->
+  <div id="detailModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-5xl w-full overflow-hidden shadow-2xl my-auto max-h-[92vh] flex flex-col lg:flex-row">
+      <!-- Left: Interactive 3D Showcase Viewer -->
+      <div class="lg:w-7/12 bg-slate-950 relative flex flex-col justify-between min-h-[320px] sm:min-h-[420px] border-b lg:border-b-0 lg:border-r border-slate-800">
+        <!-- Top Overlay inside 3D Viewer -->
+        <div class="relative z-10 p-3.5 flex items-center justify-between gap-2 pointer-events-none">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span id="detailCatBadge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-400/40">문화유산</span>
+            <span id="detailSubCatBadge" class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-800 text-slate-300 border border-slate-700">건축·사적</span>
+            <span id="detailAuraBadge" class="hidden px-2 py-0.5 rounded-full text-[11px] font-bold bg-yellow-500/20 text-yellow-300 border border-yellow-400/50">✨ 황금 후광 유산</span>
+          </div>
+          <span class="text-[11px] text-slate-400 bg-slate-900/80 px-2.5 py-1 rounded-lg border border-slate-800">
+            🖱️ 드래그: 360° 회전 · 휠: 확대/축소
+          </span>
+        </div>
+
+        <!-- Three.js Detail 3D Canvas Container -->
+        <div id="detail3DCanvasContainer" class="absolute inset-0 w-full h-full z-0 cursor-grab active:cursor-grabbing"></div>
+
+        <!-- Bottom 3D Controls Bar -->
+        <div class="relative z-10 p-3 flex flex-wrap items-center justify-between gap-2 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent">
+          <div class="flex items-center gap-1.5">
+            <button id="btnDetailToggleRotate" type="button" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-xs text-amber-300 border border-slate-700 transition">
+              🔄 자동 회전: 켜짐
+            </button>
+            <button id="btnDetailLightMood" type="button" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 transition">
+              💡 조명: 주간 자연광
+            </button>
+            <button id="btnDetailResetCam" type="button" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 transition">
+              🎯 원래 시점
+            </button>
+          </div>
+          <div id="detailModelTypeLabel" class="text-[11px] text-slate-400 font-medium">3D 모델: 전통 석탑·성곽 프리셋</div>
+        </div>
+      </div>
+
+      <!-- Right: Heritage Story, Registrant Zodiac Profile, Reactions & Comments -->
+      <div class="lg:w-5/12 flex flex-col justify-between max-h-[88vh] overflow-y-auto custom-scroll p-4 sm:p-6">
+        <div>
+          <!-- Header & Close Button -->
+          <div class="flex items-start justify-between gap-2 mb-3">
+            <div>
+              <div id="detailRegionText" class="text-xs font-semibold text-amber-400 mb-0.5">충남 공주시 웅진로 280</div>
+              <h3 id="detailTitleText" class="text-lg sm:text-xl font-extrabold text-white">공주 공산성과 백제 성곽</h3>
+            </div>
+            <button id="btnCloseDetailModal" type="button" class="text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl px-2.5 py-1 text-sm font-bold">✕</button>
+          </div>
+
+          <!-- Registrant Zodiac Avatar Profile Card -->
+          <div class="flex items-center gap-3 bg-slate-800/60 border border-slate-700/80 rounded-2xl p-2.5 mb-4">
+            <div id="detailRegistrantAvatar" class="w-11 h-11 rounded-full overflow-hidden flex-shrink-0 border-2 border-amber-400/70 bg-slate-950"></div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span id="detailRegistrantName" class="text-xs font-bold text-white">웅진지기</span>
+                <span id="detailRegistrantZodiacLabel" class="text-[11px] px-2 py-0.5 rounded-full bg-slate-900 text-amber-300 border border-slate-700">축(소) · 아기 송아지</span>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-0.5">우리 동네 유산 큐레이터</p>
+            </div>
+          </div>
+
+          <!-- Heritage Story & Official Info -->
+          <div class="bg-slate-950/60 border border-slate-800 rounded-2xl p-3.5 mb-4">
+            <div class="text-xs font-bold text-amber-300 mb-1">💬 내가 이 유산을 자랑하는 이유</div>
+            <p id="detailStoryText" class="text-xs sm:text-sm text-slate-200 leading-relaxed whitespace-pre-line"></p>
+            <div class="mt-3 pt-2.5 border-t border-slate-800/80 flex flex-col gap-1 text-[11px] text-slate-400">
+              <div><strong class="text-slate-300">📍 좌표 정보:</strong> <span id="detailCoordText">북위 36.4633°, 동경 127.1269°</span></div>
+              <div><strong class="text-slate-300">📚 자료 출처:</strong> <span id="detailSourceText">국가유산청 국가유산포털</span></div>
+            </div>
+          </div>
+
+          <!-- 3 Reaction Buttons (+10P each) -->
+          <div class="mb-4">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-xs font-bold text-slate-200">공감 표현 남기기 <span class="text-amber-400 font-semibold">(클릭 시 +10P)</span></span>
+              <span class="text-[11px] text-slate-400">서로 다른 유산 3점 공감 시 미션 완료!</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+              <button id="btnReactLove" type="button" class="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 transition">
+                <span class="text-base">❤️</span>
+                <span class="text-[11px] font-bold text-slate-200 mt-0.5">애정해요</span>
+                <span id="countReactLove" class="text-xs font-extrabold text-amber-300">0</span>
+              </button>
+              <button id="btnReactProud" type="button" class="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 transition">
+                <span class="text-base">✨</span>
+                <span class="text-[11px] font-bold text-slate-200 mt-0.5">자랑스러워요</span>
+                <span id="countReactProud" class="text-xs font-extrabold text-amber-300">0</span>
+              </button>
+              <button id="btnReactVisit" type="button" class="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 transition">
+                <span class="text-base">👣</span>
+                <span class="text-[11px] font-bold text-slate-200 mt-0.5">가보고 싶어요</span>
+                <span id="countReactVisit" class="text-xs font-extrabold text-amber-300">0</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Comments Section (+30P) -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-bold text-slate-200">응원 댓글 <span id="detailCommentCount" class="text-amber-300">(0)</span></span>
+              <span class="text-[11px] text-emerald-300 font-medium">댓글 작성 시 +30P 적립!</span>
+            </div>
+            <div class="flex items-center gap-2 mb-3">
+              <input id="commentInput" type="text" maxlength="120" placeholder="우리 동네 유산에 따뜻한 감상평을 남겨주세요..."
+                class="flex-1 bg-slate-800 text-xs text-white px-3 py-2 rounded-xl border border-slate-700 focus:border-amber-400 focus:outline-none" />
+              <button id="btnSubmitComment" type="button" class="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold flex-shrink-0 transition">
+                등록(+30P)
+              </button>
+            </div>
+            <div id="detailCommentsList" class="space-y-2 max-h-44 overflow-y-auto custom-scroll pr-1"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. DUAL-MODE 3D HERITAGE REGISTRATION MODAL ('우리 동네 3D 유산 자랑하기') -->
+  <div id="registerModal" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-4xl w-full p-5 sm:p-6 shadow-2xl my-auto max-h-[92vh] overflow-y-auto custom-scroll">
+      <div class="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30">참여 미션 4 · 등록 시 +100P & ✨황금 후광 부여</span>
+          <h3 class="text-lg sm:text-xl font-extrabold text-white mt-1">우리 동네 3D 유산 자랑하기</h3>
+          <p class="text-xs text-slate-300">기본 3D 프리셋을 나만의 색상·사진으로 꾸미거나, 직접 스캔한 <code class="text-amber-300">.glb</code> 3D 모델 파일을 올려 지도에 등록하세요.</p>
+        </div>
+        <button id="btnCloseRegisterModal" type="button" class="text-slate-400 hover:text-white bg-slate-800 rounded-xl px-2.5 py-1 text-sm font-bold">✕</button>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <!-- Left: Mode Tabs (Preset Customizer vs .GLB Upload) + Live 3D Preview -->
+        <div class="lg:col-span-6 flex flex-col gap-3">
+          <!-- Mode Switch Tabs -->
+          <div class="grid grid-cols-2 gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+            <button id="tabModePreset" type="button" class="py-2 px-3 rounded-lg text-xs font-extrabold bg-amber-500 text-slate-950 transition">
+              🎨 방식 A: 기본 3D 프리셋 꾸미기
+            </button>
+            <button id="tabModeGlb" type="button" class="py-2 px-3 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition">
+              📦 방식 B: 내 .glb 파일 업로드
+            </button>
+          </div>
+
+          <!-- Live 3D Preview Box -->
+          <div class="relative w-full h-56 bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden">
+            <div id="register3DPreviewContainer" class="w-full h-full"></div>
+            <div class="absolute top-2.5 left-2.5 bg-slate-900/85 px-2.5 py-1 rounded-lg border border-slate-700 text-[11px] text-amber-300 font-semibold pointer-events-none">
+              실시간 3D 오브젝트 미리보기 (드래그 회전)
+            </div>
+          </div>
+
+          <!-- Mode A Controls: Preset Mesh + Material Color + Optional Photo Texture -->
+          <div id="panelModePreset" class="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5 space-y-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-200 mb-1.5">1) 3D 베이스 프리셋 모델 선택</label>
+              <div id="presetModelButtons" class="grid grid-cols-2 sm:grid-cols-3 gap-1.5"></div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-slate-200 mb-1.5">2) 표면 전통 색상 선택</label>
+                <div id="presetColorButtons" class="flex items-center gap-2"></div>
+              </div>
+              <div>
+                <label for="presetTextureInput" class="block text-xs font-bold text-slate-200 mb-1.5">3) 유산 사진 텍스처 입히기(선택)</label>
+                <input id="presetTextureInput" type="file" accept="image/*"
+                  class="w-full text-[11px] text-slate-300 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-800 file:text-amber-300 hover:file:bg-slate-700" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Mode B Controls: Direct .glb/.gltf Upload -->
+          <div id="panelModeGlb" class="hidden bg-slate-950/80 border border-slate-800 rounded-2xl p-4 space-y-3">
+            <div class="border-2 border-dashed border-slate-700 hover:border-amber-400 rounded-2xl p-4 text-center transition">
+              <div class="text-2xl mb-1">📦</div>
+              <p class="text-xs font-bold text-white mb-1">스마트폰 3D 스캔 또는 모델링 파일(.glb / .gltf) 선택</p>
+              <p class="text-[11px] text-slate-400 mb-3">업로드 즉시 중심 정렬(Auto-Center) 및 크기 정규화가 자동 적용됩니다.</p>
+              <input id="glbFileInput" type="file" accept=".glb,.gltf"
+                class="w-full text-xs text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-extrabold file:bg-amber-500 file:text-slate-950 hover:file:bg-amber-400" />
+            </div>
+            <div id="glbUploadStatus" class="text-[11px] text-slate-400 text-center">
+              ※ 현재 `.glb` 파일이 없어도 테스트용 절차적 3D 모델이 함께 작동합니다.
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Heritage Information Inputs -->
+        <div class="lg:col-span-6 flex flex-col justify-between bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-3">
+          <div class="space-y-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label for="regRegionSelect" class="block text-xs font-bold text-slate-200 mb-1">권역 및 동네 선택 *</label>
+                <select id="regRegionSelect" class="w-full bg-slate-800 text-xs text-white rounded-xl px-3 py-2 border border-slate-700 focus:border-amber-400 focus:outline-none">
+                  <option value="충청|36.4633|127.1269|충남 공주시">충청 · 충남 공주시</option>
+                  <option value="충청|36.3325|127.4342|대전 동구">충청 · 대전광역시</option>
+                  <option value="충청|36.2890|126.9120|충남 부여군">충청 · 충남 부여군</option>
+                  <option value="서울·경기·인천|37.5796|126.9770|서울 종로구">수도권 · 서울특별시</option>
+                  <option value="서울·경기·인천|37.2859|127.0141|경기 수원시">수도권 · 경기 수원시</option>
+                  <option value="강원|37.7519|128.8760|강원 강릉시">강원 · 강원 강릉시</option>
+                  <option value="전라|35.8147|127.1526|전북 전주시">전라 · 전북 전주시</option>
+                  <option value="전라|35.1595|126.8526|광주 동구">전라 · 광주광역시</option>
+                  <option value="경상|36.5389|128.5181|경북 안동시">경상 · 경북 안동시</option>
+                  <option value="경상|35.8347|129.2190|경북 경주시">경상 · 경북 경주시</option>
+                  <option value="경상|35.1796|129.0756|부산 중구">경상 · 부산광역시</option>
+                  <option value="제주|33.4522|126.7125|제주 제주시">제주 · 제주특별자치도</option>
+                </select>
+              </div>
+              <div>
+                <label for="regTownDetailInput" class="block text-xs font-bold text-slate-200 mb-1">상세 마을·고을명 *</label>
+                <input id="regTownDetailInput" type="text" placeholder="예: 산성동, 대덕구, 풍천면"
+                  class="w-full bg-slate-800 text-xs text-white rounded-xl px-3 py-2 border border-slate-700 focus:border-amber-400 focus:outline-none" />
+              </div>
+            </div>
+
+            <div>
+              <label for="regTitleInput" class="block text-xs font-bold text-slate-200 mb-1">자랑하고 싶은 유산 이름 *</label>
+              <input id="regTitleInput" type="text" placeholder="예: 우리 마을 천년 느티나무와 당산제, 옛 한지 공방 기록"
+                class="w-full bg-slate-800 text-xs text-white rounded-xl px-3 py-2 border border-slate-700 focus:border-amber-400 focus:outline-none" />
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label for="regCategorySelect" class="block text-xs font-bold text-slate-200 mb-1">국가유산 3대 대분류 *</label>
+                <select id="regCategorySelect" class="w-full bg-slate-800 text-xs text-white rounded-xl px-3 py-2 border border-slate-700 focus:border-amber-400 focus:outline-none">
+                  <option value="문화유산">🏛️ 문화유산 (건축·사적·기록·유물)</option>
+                  <option value="자연유산">🌲 자연유산 (명승·천연기념물·경관)</option>
+                  <option value="무형유산">🎭 무형유산 (전통기술·연희·민속)</option>
+                </select>
+              </div>
+              <div>
+                <label for="regSubCategorySelect" class="block text-xs font-bold text-slate-200 mb-1">세부 유형 태그 *</label>
+                <select id="regSubCategorySelect" class="w-full bg-slate-800 text-xs text-white rounded-xl px-3 py-2 border border-slate-700 focus:border-amber-400 focus:outline-none">
+                  <option value="건축·사적">건축·사적유산</option>
+                  <option value="기록·근현대">기록·근현대유산</option>
+                  <option value="전통기술·공예">전통기술·공예유산</option>
+                  <option value="민속·마을축제">민속·마을공동체유산</option>
+                  <option value="명승·자연경관">명승·자연경관유산</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label for="regStoryInput" class="block text-xs font-bold text-slate-200 mb-1">내가 이 유산을 자랑하는 이유 (스토리) *</label>
+              <textarea id="regStoryInput" rows="3" placeholder="이 유산에 담긴 추억이나 사람들에게 꼭 알리고 싶은 가치를 적어주세요..."
+                class="w-full bg-slate-800 text-xs text-white rounded-xl p-3 border border-slate-700 focus:border-amber-400 focus:outline-none resize-none"></textarea>
+            </div>
+
+            <div>
+              <label for="regSourceInput" class="block text-xs font-bold text-slate-200 mb-1">자료 출처 및 이용 조건 표기</label>
+              <input id="regSourceInput" type="text" value="직접 촬영·모델링 및 국가유산청 공공누리 참조"
+                class="w-full bg-slate-800 text-xs text-slate-300 rounded-xl px-3 py-2 border border-slate-700 focus:border-amber-400 focus:outline-none" />
+            </div>
+          </div>
+
+          <div class="pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+            <span class="text-[11px] text-slate-400">내 십이지신 프로필이 등록자로 함께 표시됩니다.</span>
+            <button id="btnSubmitHeritage" type="button" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 text-xs font-extrabold shadow-lg shadow-amber-500/20 transition">
+              지도에 3D 유산 올리기 (+100P)
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. MISSION, REWARD CODEX & 3D GUARDIAN PLAQUE MODAL -->
+  <div id="missionModal" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-4xl w-full p-5 sm:p-6 shadow-2xl my-auto max-h-[92vh] overflow-y-auto custom-scroll">
+      <div class="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">게이미피케이션 미션 & 보상 도감</span>
+          <h3 class="text-lg sm:text-xl font-extrabold text-white mt-1">국가유산 탐험 미션 & 3D 명예 수호패</h3>
+        </div>
+        <button id="btnCloseMissionModal" type="button" class="text-slate-400 hover:text-white bg-slate-800 rounded-xl px-2.5 py-1 text-sm font-bold">✕</button>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <!-- Left: Mission Progress Table & Level Bar -->
+        <div class="lg:col-span-7 space-y-3">
+          <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-4">
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center gap-2.5">
+                <div id="missionUserAvatar" class="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-400 bg-slate-900"></div>
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span id="missionUserNickname" class="text-sm font-extrabold text-white">탐험가</span>
+                    <span id="missionUserLevelBadge" class="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">Lv.1 마을 나그네</span>
+                  </div>
+                  <div id="missionUserZodiacText" class="text-[11px] text-slate-400 mt-0.5">유(닭) · 1단계 노란 병아리</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div id="missionTotalPoints" class="text-xl font-extrabold text-amber-400">0P</div>
+                <div class="text-[11px] text-slate-400">목표 수호패 해금: 150P</div>
+              </div>
+            </div>
+            <!-- Progress Bar -->
+            <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
+              <div id="missionProgressBar" class="h-full bg-gradient-to-r from-amber-400 via-orange-500 to-yellow-300 transition-all duration-500" style="width: 10%"></div>
+            </div>
+            <div class="flex justify-between text-[10px] text-slate-400 mt-1">
+              <span>Lv.1 나그네(0P)</span>
+              <span>Lv.2 탐험가(50P)</span>
+              <span>Lv.3 수호자(150P·인증서 해금)</span>
+              <span>Lv.4 명예 학예사(240P)</span>
+            </div>
+          </div>
+
+          <!-- Mission Cards List -->
+          <div id="missionListContainer" class="space-y-2"></div>
+
+          <div class="flex items-center justify-between pt-1">
+            <button id="btnChangeAvatarFromMission" type="button" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-amber-300 border border-slate-700 transition">
+              🐾 내 십이지신 생애주기 캐릭터·옷장 변경하기
+            </button>
+          </div>
+        </div>
+
+        <!-- Right: 3D Guardian Plaque (디지털 인증서) Viewer -->
+        <div class="lg:col-span-5 flex flex-col justify-between bg-slate-950 border border-slate-800 rounded-2xl p-4">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-extrabold text-amber-300">🏆 3D 입체 국가유산 수호패</span>
+              <span id="plaqueLockBadge" class="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">🔒 150P 달성 시 해금</span>
+            </div>
+            <div class="relative w-full h-56 rounded-2xl bg-slate-900 border border-slate-800 overflow-hidden mb-3">
+              <div id="plaque3DCanvasContainer" class="w-full h-full"></div>
+              <div id="plaqueLockedOverlay" class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center">
+                <div class="text-3xl mb-2">🔒</div>
+                <p class="text-xs font-bold text-white">아직 수호패가 잠겨 있습니다</p>
+                <p class="text-[11px] text-slate-400 mt-1">문화·자연·무형유산을 감상하거나 공감·댓글·3D 유산 등록으로 <strong class="text-amber-300">150P</strong>를 달성하면 황금 3D 수호패와 스페셜 <strong class="text-amber-300">금동대향로 프리셋</strong>이 해금됩니다!</p>
+              </div>
+            </div>
+
+            <!-- Engraved Certificate Card Preview -->
+            <div class="bg-gradient-to-br from-amber-500/10 via-slate-900 to-slate-900 border border-amber-500/30 rounded-xl p-3 text-center">
+              <div class="text-[10px] font-bold tracking-widest text-amber-300 uppercase">KOREA NATIONAL HERITAGE GUARDIAN</div>
+              <div class="text-sm font-extrabold text-white mt-0.5" id="certHolderName">탐험가 님</div>
+              <div class="text-[11px] text-slate-300 mt-0.5" id="certHolderZodiac">수호 상징: 유(닭) · 노란 병아리</div>
+              <div class="text-[10px] text-slate-400 mt-1" id="certIssuedDate">발급일: 2026. 11. 13. · 우리 동네 3D 보물창고</div>
+            </div>
+          </div>
+
+          <button id="btnDownloadCertificate" type="button" class="mt-3 w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold transition">
+            📥 내 십이지신 수호패 디지털 인증서(PNG) 저장
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. SOURCES.MD & TODO.MD REFERENCE MODAL -->
+  <div id="sourcesModal" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl my-auto max-h-[88vh] overflow-y-auto custom-scroll">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-base sm:text-lg font-extrabold text-white">📚 자료 출처(sources.md) 및 잔여 과제(todo.md)</h3>
+        <button id="btnCloseSourcesModal" type="button" class="text-slate-400 hover:text-white bg-slate-800 rounded-xl px-2.5 py-1 text-sm font-bold">✕</button>
+      </div>
+      <div class="space-y-4 text-xs text-slate-300 leading-relaxed">
+        <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+          <h4 class="text-sm font-bold text-amber-300 mb-2">1. 초기 전시 자료 출처 및 이용 조건 (sources.md)</h4>
+          <ul class="list-disc pl-4 space-y-1.5">
+            <li><strong>A01 공주 공산성 (사적, 1963.01.21 지정)</strong>: 충남 공주시 웅진로 280 (산성동 2번지, 북위 36.4633°, 동경 127.1269°), 면적 376,645.3㎡, 유네스코 세계유산 백제역사유적지구(2015). 출처: 국가유산청 국가유산포털 및 국가유산 디지털 서비스 (공공누리 제1유형).</li>
+            <li><strong>A02 구 철도청 대전지역사무소 보급창고 3호 (국가등록문화유산 제168호)</strong>: 대전광역시 동구 소제동 (1956년 건립, 2005.04.15 등록, 건축면적 397.09㎡, 목재 트러스 구조). 출처: 국가유산청 국가유산 디지털 서비스.</li>
+            <li><strong>A03 안동 하회별신굿탈놀이와 마을 장승</strong>: 경북 안동시 풍천면 하회리 (북위 36.5389°, 동경 128.5181°). 출처: 국가유산청 국가유산포털 공공누리.</li>
+            <li><strong>A04 제주 거문오름 용암동굴계와 돌문화 경관</strong>: 제주시 조천읍 선흘리 산 102-1 (해발 456m, 둘레 4,551m, 2007 유네스코 세계자연유산 등재). 출처: 비짓제주 및 국가유산청 세계자연유산 자료.</li>
+            <li><strong>A05 전주 전통 한지장(韓紙匠) 한지 뜨기 기술</strong>: 전북 전주시 완산구 한옥마을 일원 (북위 35.8147°, 동경 127.1526°). 출처: 국가유산청 국가무형유산 포털.</li>
+          </ul>
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4">
+          <h4 class="text-sm font-bold text-emerald-300 mb-2">2. 향후 고도화 및 남은 과제 기록 (todo.md)</h4>
+          <ul class="list-disc pl-4 space-y-1.5">
+            <li>국가유산 디지털 서비스의 실측 정밀 3D 스캔 에셋(<code>.glb</code>/<code>.fbx</code>) 경량화 압축(Draco 압축) 연동</li>
+            <li>다중 사용자 실시간 공유를 위한 클라우드 데이터베이스(Firebase / Supabase) 연동</li>
+            <li>모바일 WebXR(AR 모드) 뷰어 연동을 통한 내 방에서 우리 동네 유산 돌려보기 기능 확장</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APPLICATION SCRIPT -->
+  <script>
+    // =========================================================================
+    // 1. ZODIAC 12 ANIMALS × 4 LIFECYCLE STAGES DATA & CUSTOM SVG GENERATOR
+    // =========================================================================
+    const ZODIAC_DATA = [
+      {
+        id: 'rat', kr: '자(쥐)', emoji: '🐭', baseColor: '#94a3b8', earColor: '#f472b6',
+        stages: [
+          { step: 1, label: '아기(유년기)', name: '분홍코 아기 생쥐', desc: '호기심 가득한 분홍코 아기 생쥐' },
+          { step: 2, label: '소년·청년기', name: '재빠른 들쥐', desc: '골목길 보물을 찾아다니는 들쥐' },
+          { step: 3, label: '성체(장년기)', name: '지혜로운 큰쥐', desc: '곳간과 기록을 지키는 큰쥐' },
+          { step: 4, label: '노년(현자)', name: '흰 수염 선비 늙은 쥐', desc: '오랜 세월의 지혜를 품은 백수염 선비쥐' }
+        ]
+      },
+      {
+        id: 'ox', kr: '축(소)', emoji: '🐮', baseColor: '#d97706', earColor: '#fde68a',
+        stages: [
+          { step: 1, label: '아기(유년기)', name: '귀 큰 아기 송아지', desc: '맑은 눈망울의 귀여운 아기 송아지' },
+          { step: 2, label: '소년·청년기', name: '뿔 돋은 젊은 황소', desc: '씩씩하게 자라나는 젊은 황소' },
+          { step: 3, label: '성체(장년기)', name: '듬직한 큰 일소', desc: '마을 농사와 역사를 함께한 일소' },
+          { step: 4, label: '노년(현자)', name: '워낭 달린 백발 영물 노소', desc: '은빛 뿔과 황금 워낭을 지닌 영물 노소' }
+        ]
+      },
+      {
+        id: 'tiger', kr: '인(호랑이)', emoji: '🐯', baseColor: '#f59e0b', earColor: '#1e293b',
+        stages: [
+          { step: 1, label: '아기(유년기)', name: '아기 호랑이(개호주)', desc: '발바닥이 말랑한 아기 호랑이 개호주' },
+          { step: 2, label: '소년·청년기', name: '날쌘 젊은 줄무늬 범', desc: '산자락을 달리는 기운찬 젊은 범' },
+          { step: 3, label: '성체(장년기)', name: '위풍당당 산군 호랑이', desc: '전통 민화 속 용맹한 산군 호랑이' },
+          { step: 4, label: '노년(현자)', name: '흰 눈썹 백호 산신령', desc: '백발 눈썹을 휘날리는 영험한 백호 산신령' }
+        ]
+      },
+      {
+        id: 'rabbit', kr: '묘(토끼)', emoji: '🐰', baseColor: '#f8fafc', earColor: '#fb7185',
+        stages: [
+          { step: 1, label: '아기(유년기)', name: '솜털 아기 토끼', desc: '보송보송한 솜털 아기 토끼' },
+          { step: 2, label: '소년·청년기', name: '귀 쫑긋 들토끼', desc: '귀를 쫑긋 세운 발랄한 들토끼' },
+          { step: 3, label: '성체(장년기)', name: '절구 찧는 달토끼', desc: '달빛 아래 계수나무 절구를 찧는 달토끼' },
+          { step: 4, label: '노년(현자)', name: '긴 수염 달나라 장로 토끼', desc: '은빛 긴 수염을 지닌 달나라 장로 토끼' }
+        ]
+      },
+      {
+        id: 'dragon', kr: '진(용)', emoji: '🐲', baseColor: '#06b6d4', earColor: '#fbbf24',
+        stages: [
+          { step: 1, label: '아기(유년기)', name: '알에서 깬 아기 미르', desc: '작은 뿔이 솟아난 귀여운 아기 미르' },
+          { step: 2, label: '소년·청년기', name: '물오른 젊은 이무기', desc: '승천을 준비하는 푸른 젊은 이무기' },
+          { step: 3, label: '성체(장년기)', name: '구름 타는 청룡', desc: '비구름을 다스리는 위엄 있는 청룡' },
+          { step: 4, label: '노년(현자)', name: '여의주 품은 황금 노룡', desc: '천년의 여의주를 품은 백수염 황금 노룡' }
+        ]
+      },
+      {
+        id: 'snake', kr: '사(뱀)', emoji: '🐍', baseColor: '#10b981', earColor: '#a7f3d0',
+        stages: [
+          { step: 1, label: '아기(유년기)', name: '동글동글 아기 꽃뱀', desc: '똬리를 튼 귀엽고 작은 아기 꽃뱀' },
+          { step: 2, label: '소년·청년기', name: '날렵한 비단 구렁이', desc: '윤기 나는 비늘의 젊은 비단 구렁이' },
+          { step: 3, label: '성체(장년기)', name: '갓 쓴 선비 배암', desc: '마을 고택을 지키는 점잖은 업구렁이' },
+          { step: 4, label: '노년(현자)', name: '천년 묵은 지혜의 백사', desc: '신비로운 은빛 비늘의 천년 백사' }
+        ]
+      },
+      {
+        id: 'horse', kr: '오(말)', emoji: '🐴', baseColor: '#b45309', earColor: '#78350f',
+        stages: [
+          { step: 1, label: '아기(유년기)', name: '아장아장 아기 망아지', desc: '초원을 폴짝이는 귀여운 아기 망아지' },
+          { step: 2, label: '소년·청년기', name: '초원을 달리는 젊은 준마', desc: '갈기가 자라난 씩씩한 젊은 준마' },
+          { step: 3, label: '성체(장년기)', name: '갈기 휘날리는 천리마', desc: '역참과 성곽을 누비던 용맹한 천리마' },
+          { step: 4, label: '노년(현자)', name: '은빛 갈기 노련한 명마', desc: '하얀 은빛 갈기를 지닌 전설의 노마' }
+        ]
+      },
+      {
+        id: 'sheep', kr: '미(양)', emoji: '🐑', baseColor: '#e2e8f0', earColor: '#cbd5e1',
+        stages: [
+          { step: 1, label: '아기(유년기)', name: '몽실몽실 아기 어린양', desc: '구름처럼 포근한 아기 어린양' },
+          { step: 2, label: '소년·청년기', name: '곱슬털 젊은 초원양', desc: '작은 뿔이 돋아난 활발한 초원양' },
+          { step: 3, label: '성체(장년기)', name: '굽은 뿔 우두머리 산양', desc: '단단한 둥근 뿔을 지닌 듬직한 산양' },
+          { step: 4, label: '노년(현자)', name: '긴 수염 구름 도사 노양', desc: '무릎까지 내려오는 긴 수염의 도사 노양' }
+        ]
+      },
+      {
+        id: 'monkey', kr: '신(원숭이)', emoji: '🐵', baseColor: '#a16207', earColor: '#fde047',
+        stages: [
+          { step: 1, label: '아기(유년기)', name: '호기심 많은 아기 잔나비', desc: '눈이 반짝이는 귀여운 아기 잔나비' },
+          { step: 2, label: '소년·청년기', name: '재주꾼 젊은 원숭이', desc: '손재주가 뛰어난 총명한 원숭이' },
+          { step: 3, label: '성체(장년기)', name: '박학다식 대장 원숭이', desc: '온갖 옛이야기를 꿰뚫는 대장 원숭이' },
+          { step: 4, label: '노년(현자)', name: '백발의 신선 노원숭이', desc: '하얀 털과 긴 눈썹을 지닌 신선 원숭이' }
+        ]
+      },
+      {
+        id: 'rooster', kr: '유(닭)', emoji: '🐤', baseColor: '#facc15', earColor: '#ef4444',
+        stages: [
+          { step: 1, label: '아기(유년기)', name: '삐약삐약 노란 병아리', desc: '알에서 막 깨어난 노란 솜털 아기 병아리' },
+          { step: 2, label: '소년·청년기', name: '벼슬 돋은 햇병아리(영계)', desc: '작은 붉은 벼슬이 돋아난 발랄한 햇병아리' },
+          { step: 3, label: '성체(장년기)', name: '새벽을 깨우는 우렁찬 장닭', desc: '화려한 깃털과 붉은 벼슬의 늠름한 장닭' },
+          { step: 4, label: '노년(현자)', name: '오색 깃털의 지혜로운 노계', desc: '은빛 수염과 봉황 같은 관록을 지닌 노계' }
+        ]
+      },
+      {
+        id: 'dog', kr: '술(개)', emoji: '🐶', baseColor: '#eab308', earColor: '#ca8a04',
+        stages: [
+          { step: 1, label: '아기(유년기)', name: '복슬복슬 아기 강아지', desc: '꼬리를 흔드는 귀여운 아기 강아지' },
+          { step: 2, label: '소년·청년기', name: '꼬리 치는 젊은 삽살개', desc: '사악한 기운을 쫓는 복슬털 삽살개' },
+          { step: 3, label: '성체(장년기)', name: '충직한 마을 진돗개', desc: '고을의 대문을 굳건히 지키는 진돗개' },
+          { step: 4, label: '노년(현자)', name: '흰 눈썹의 늠름한 수호 노견', desc: '흰 눈썹과 깊은 눈빛을 지닌 마을 수호 노견' }
+        ]
+      },
+      {
+        id: 'pig', kr: '해(돼지)', emoji: '🐷', baseColor: '#f472b6', earColor: '#fb7185',
+        stages: [
+          { step: 1, label: '아기(유년기)', name: '분홍빛 아기 꽃돼지', desc: '복을 몰고 오는 통통한 아기 꽃돼지' },
+          { step: 2, label: '소년·청년기', name: '복스러운 젊은 멧돼지', desc: '건강하고 활기 넘치는 젊은 복돼지' },
+          { step: 3, label: '성체(장년기)', name: '복주머니 멘 황금 돼지', desc: '풍요와 다복을 상징하는 황금 복돼지' },
+          { step: 4, label: '노년(현자)', name: '인자한 미소의 터줏대감 노돈', desc: '흰 수염과 인자한 미소를 지닌 터줏대감 노돈' }
+        ]
+      }
+    ];
+
+    const OBANGSAEK_FRAMES = [
+      { id: 'yellow', name: '황색(중앙)', bg: '#422006', border: '#facc15' },
+      { id: 'blue', name: '청색(동방)', bg: '#082f49', border: '#38bdf8' },
+      { id: 'red', name: '적색(남방)', bg: '#450a0a', border: '#f87171' },
+      { id: 'white', name: '백색(서방)', bg: '#1e293b', border: '#f8fafc' },
+      { id: 'black', name: '흑색(북방)', bg: '#090d16', border: '#a855f7' }
+    ];
+
+    const AVATAR_ACCESSORIES = [
+      { id: 'none', name: '기본(없음)', unlockMission: null },
+      { id: 'sprout', name: '🌱 새싹·꽃잎', unlockMission: null },
+      { id: 'scholar', name: '🎓 유생 복건', unlockMission: null },
+      { id: 'gat', name: '🎩 전통 갓(미션1 보상)', unlockMission: 'm1' },
+      { id: 'crown', name: '👑 금관·어사화(수호자 보상)', unlockMission: 'final' }
+    ];
+
+    // Custom SVG Avatar Renderer for 12 Zodiac × 4 Lifecycle Stages
+    function renderZodiacAvatarSVG(animalId, stageStep, frameId = 'yellow', accessoryId = 'none') {
+      const animal = ZODIAC_DATA.find(a => a.id === animalId) || ZODIAC_DATA[9]; // default rooster
+      const frame = OBANGSAEK_FRAMES.find(f => f.id === frameId) || OBANGSAEK_FRAMES[0];
+      const step = Number(stageStep) || 1;
+
+      // Scale & proportions by lifecycle stage (1=baby round/small, 2=youth, 3=adult, 4=elder with white eyebrows/beard)
+      const headRadius = step === 1 ? 23 : step === 2 ? 25 : step === 3 ? 27 : 26;
+      const eyeRadius = step === 1 ? 3.8 : step === 2 ? 3.2 : step === 3 ? 2.8 : 2.4;
+      const bodyColor = (step === 1 && animalId === 'rooster') ? '#fde047' : (step === 4 && (animalId === 'tiger' || animalId === 'snake')) ? '#e2e8f0' : animal.baseColor;
+
+      // Animal-specific ears/horns/comb
+      let topFeature = '';
+      if (animalId === 'rooster') {
+        const combSize = step === 1 ? 4 : step === 2 ? 8 : step === 3 ? 13 : 11;
+        const combColor = step === 1 ? '#facc15' : '#ef4444';
+        topFeature = `<path d="M42,${50 - headRadius} Q46,${50 - headRadius - combSize} 50,${50 - headRadius - combSize * 0.6} Q54,${50 - headRadius - combSize * 1.2} 58,${50 - headRadius}" fill="${combColor}" />`;
+      } else if (animalId === 'ox') {
+        const hornLen = step === 1 ? 4 : step === 2 ? 10 : step === 3 ? 16 : 18;
+        const hornColor = step === 4 ? '#f8fafc' : '#fef08a';
+        topFeature = `
+          <ellipse cx="${50 - headRadius + 2}" cy="44" rx="7" ry="4" fill="${bodyColor}" />
+          <ellipse cx="${50 + headRadius - 2}" cy="44" rx="7" ry="4" fill="${bodyColor}" />
+          <path d="M32,34 Q24,${34 - hornLen} 30,${30 - hornLen}" stroke="${hornColor}" stroke-width="4" fill="none" stroke-linecap="round"/>
+          <path d="M68,34 Q76,${34 - hornLen} 70,${30 - hornLen}" stroke="${hornColor}" stroke-width="4" fill="none" stroke-linecap="round"/>
+        `;
+      } else if (animalId === 'horse') {
+        const maneColor = step === 4 ? '#e2e8f0' : '#451a03';
+        topFeature = `
+          <polygon points="34,30 28,15 41,24" fill="${bodyColor}" />
+          <polygon points="66,30 72,15 59,24" fill="${bodyColor}" />
+          <path d="M46,22 Q50,12 54,22" stroke="${maneColor}" stroke-width="6" fill="none" stroke-linecap="round" />
+        `;
+      } else if (animalId === 'rabbit') {
+        const earH = step === 1 ? 14 : 22;
+        topFeature = `
+          <ellipse cx="39" cy="${32 - earH / 2}" rx="5.5" ry="${earH / 2}" fill="${bodyColor}" stroke="#cbd5e1" stroke-width="1"/>
+          <ellipse cx="39" cy="${32 - earH / 2}" rx="2.8" ry="${earH / 3}" fill="${animal.earColor}"/>
+          <ellipse cx="61" cy="${32 - earH / 2}" rx="5.5" ry="${earH / 2}" fill="${bodyColor}" stroke="#cbd5e1" stroke-width="1"/>
+          <ellipse cx="61" cy="${32 - earH / 2}" rx="2.8" ry="${earH / 3}" fill="${animal.earColor}"/>
+        `;
+      } else if (animalId === 'dragon') {
+        const antlerH = step === 1 ? 6 : 16;
+        topFeature = `
+          <path d="M36,28 L30,${26 - antlerH} M33,${26 - antlerH / 2} L26,${24 - antlerH / 2}" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+          <path d="M64,28 L70,${26 - antlerH} M67,${26 - antlerH / 2} L74,${24 - antlerH / 2}" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"/>
+        `;
+      } else {
+        // Round/pointed ears for rat, tiger, dog, pig, sheep, monkey
+        topFeature = `
+          <circle cx="${50 - headRadius * 0.72}" cy="${50 - headRadius * 0.68}" r="${step === 1 ? 7 : 9}" fill="${bodyColor}" />
+          <circle cx="${50 - headRadius * 0.72}" cy="${50 - headRadius * 0.68}" r="4.5" fill="${animal.earColor}" />
+          <circle cx="${50 + headRadius * 0.72}" cy="${50 - headRadius * 0.68}" r="${step === 1 ? 7 : 9}" fill="${bodyColor}" />
+          <circle cx="${50 + headRadius * 0.72}" cy="${50 - headRadius * 0.68}" r="4.5" fill="${animal.earColor}" />
+        `;
+      }
+
+      // Snout / Beak
+      let snoutFeature = '';
+      if (animalId === 'rooster') {
+        snoutFeature = `<polygon points="45,52 55,52 50,60" fill="#f97316" />`;
+      } else if (animalId === 'pig' || animalId === 'ox') {
+        snoutFeature = `
+          <ellipse cx="50" cy="56" rx="9" ry="6" fill="#fda4af" />
+          <circle cx="47" cy="56" r="1.6" fill="#881337" />
+          <circle cx="53" cy="56" r="1.6" fill="#881337" />
+        `;
+      } else {
+        snoutFeature = `
+          <ellipse cx="50" cy="55" rx="6.5" ry="4.5" fill="#f8fafc" opacity="0.85" />
+          <circle cx="50" cy="53.5" r="2.5" fill="#1e293b" />
+        `;
+      }
+
+      // Stage-specific features (Stage 1: baby rosy cheeks & shell/pacifier; Stage 2: youth band; Stage 3: adult markings; Stage 4: elder white eyebrows + long sage beard + halo)
+      let stageOverlay = '';
+      if (step === 1) {
+        stageOverlay = `
+          <circle cx="36" cy="55" r="4.5" fill="#fb7185" opacity="0.65" />
+          <circle cx="64" cy="55" r="4.5" fill="#fb7185" opacity="0.65" />
+          <path d="M33,71 L40,66 L46,72 L53,66 L60,72 L67,67 L65,78 L35,78 Z" fill="#fef9c3" opacity="0.9" />
+        `;
+      } else if (step === 2) {
+        stageOverlay = `
+          <circle cx="37" cy="55" r="3.2" fill="#fb7185" opacity="0.45" />
+          <circle cx="63" cy="55" r="3.2" fill="#fb7185" opacity="0.45" />
+          <path d="M27,38 Q50,33 73,38" stroke="#38bdf8" stroke-width="3" fill="none" />
+        `;
+      } else if (step === 3) {
+        stageOverlay = `
+          <path d="M35,42 L43,44 M65,42 L57,44" stroke="#1e293b" stroke-width="2" stroke-linecap="round" />
+          <path d="M36,74 Q50,82 64,74" stroke="${frame.border}" stroke-width="3" fill="none" />
+        `;
+      } else if (step === 4) {
+        stageOverlay = `
+          <circle cx="50" cy="50" r="42" stroke="#fde047" stroke-width="1.5" stroke-dasharray="4 3" fill="none" opacity="0.75" />
+          <!-- White sage eyebrows -->
+          <path d="M31,42 Q38,37 44,42" stroke="#ffffff" stroke-width="3.5" fill="none" stroke-linecap="round" />
+          <path d="M56,42 Q62,37 69,42" stroke="#ffffff" stroke-width="3.5" fill="none" stroke-linecap="round" />
+          <!-- Long flowing white beard -->
+          <path d="M38,60 Q50,90 62,60 Q56,78 50,84 Q44,78 38,60 Z" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1" />
+          <!-- Wrinkle lines -->
+          <path d="M31,51 L35,52 M69,51 L65,52" stroke="#64748b" stroke-width="1.5" stroke-linecap="round" />
+        `;
+      }
+
+      // Accessory overlay
+      let accOverlay = '';
+      if (accessoryId === 'sprout') {
+        accOverlay = `<path d="M50,23 Q50,12 58,12 Q53,19 50,23 M50,23 Q48,14 41,15 Q46,21 50,23" fill="#4ade80" stroke="#16a34a" stroke-width="1"/>`;
+      } else if (accessoryId === 'scholar') {
+        accOverlay = `<path d="M34,28 L66,28 L62,16 L38,16 Z" fill="#1e3a8a" stroke="#93c5fd" stroke-width="1.2"/>`;
+      } else if (accessoryId === 'gat') {
+        accOverlay = `
+          <ellipse cx="50" cy="22" rx="34" ry="5" fill="#0f172a" stroke="#475569" stroke-width="1.2"/>
+          <rect x="39" y="10" width="22" height="12" rx="3" fill="#0f172a" stroke="#64748b" stroke-width="1"/>
+          <path d="M38,22 Q50,36 62,22" stroke="#facc15" stroke-width="1.5" fill="none"/>
+        `;
+      } else if (accessoryId === 'crown') {
+        accOverlay = `
+          <polygon points="32,25 36,11 45,20 50,8 55,20 64,11 68,25" fill="#facc15" stroke="#fef08a" stroke-width="1.2"/>
+          <circle cx="50" cy="14" r="2" fill="#ef4444"/>
+        `;
+      }
+
+      return `
+        <svg viewBox="0 0 100 100" class="w-full h-full">
+          <rect width="100" height="100" rx="50" fill="${frame.bg}" />
+          <circle cx="50" cy="50" r="46" fill="none" stroke="${frame.border}" stroke-width="3" opacity="0.85" />
+          ${topFeature}
+          <circle cx="50" cy="52" r="${headRadius}" fill="${bodyColor}" stroke="#0f172a" stroke-width="1.5" />
+          <!-- Eyes -->
+          <circle cx="40" cy="47" r="${eyeRadius}" fill="#0f172a" />
+          <circle cx="39" cy="45.8" r="${eyeRadius * 0.38}" fill="#ffffff" />
+          <circle cx="60" cy="47" r="${eyeRadius}" fill="#0f172a" />
+          <circle cx="59" cy="45.8" r="${eyeRadius * 0.38}" fill="#ffffff" />
+          ${snoutFeature}
+          ${stageOverlay}
+          ${accOverlay}
+          <!-- Stage badge pill at bottom -->
+          <rect x="28" y="83" width="44" height="13" rx="6.5" fill="#0f172a" stroke="${frame.border}" stroke-width="1"/>
+          <text x="50" y="92" font-size="8.5" font-weight="bold" fill="#fde047" text-anchor="middle">${step}단계·${animal.kr.slice(0,1)}</text>
+        </svg>
+      `;
+    }
+
+    // =========================================================================
+    // 2. INITIAL GROUNDED HERITAGE SAMPLES & APPLICATION STATE
+    // =========================================================================
+    const INITIAL_HERITAGE_ITEMS = [
+      {
+        id: 'A01',
+        title: '공주 공산성 (公州 公山城)',
+        regionGroup: '충청',
+        location: '충남 공주시 웅진로 280 (산성동 2번지)',
+        lat: 36.4633,
+        lng: 127.1269,
+        category: '문화유산',
+        subCategory: '건축·사적',
+        presetType: 'architecture',
+        meshColor: '#d97706',
+        hasGoldenAura: true,
+        registrant: {
+          nickname: '웅진백제지기',
+          animalId: 'ox',
+          stageStep: 1,
+          frameId: 'yellow',
+          accessoryId: 'scholar'
+        },
+        story: '백제의 수도가 웅진(공주)이었을 때 왕도를 지키던 대표 산성(사적, 1963.01.21 지정, 면적 376,645.3㎡)입니다. 금강변을 따라 이어진 성곽길과 금서루 야경은 공주 시민들이 가장 자랑스러워하는 유네스코 세계유산(2015 등재) 보물입니다.',
+        source: '국가유산청 국가유산포털 및 국가유산 디지털 서비스 (공공누리)',
+        reactions: { love: 28, proud: 34, visit: 19 },
+        userReacted: { love: false, proud: false, visit: false },
+        comments: [
+          { id: 'c1', nickname: '금강산책러', animalId: 'rabbit', stageStep: 1, frameId: 'blue', text: '저녁 노을 질 때 공산성 성곽길 걸으면 백제의 시간이 살아나는 기분이에요!', date: '2026.11.12' },
+          { id: 'c2', nickname: '역사학도', animalId: 'tiger', stageStep: 3, frameId: 'yellow', text: '토성에서 석성으로 이어진 역사적 층위가 정말 매력적인 유산입니다.', date: '2026.11.13' }
+        ],
+        createdAt: 1731400000001
+      },
+      {
+        id: 'A02',
+        title: '구 철도청 대전지역사무소 보급창고 3호',
+        regionGroup: '충청',
+        location: '대전광역시 동구 소제동 (대전역 동광장 일원)',
+        lat: 36.3325,
+        lng: 127.4342,
+        category: '문화유산',
+        subCategory: '기록·근현대',
+        presetType: 'archive',
+        meshColor: '#38bdf8',
+        hasGoldenAura: false,
+        registrant: {
+          nickname: '대전기록탐험가',
+          animalId: 'rooster',
+          stageStep: 1,
+          frameId: 'blue',
+          accessoryId: 'sprout'
+        },
+        story: '1956년 건립되어 2005년 국가등록문화유산(제168호, 건축면적 397.09㎡)으로 등록된 철도 물자 보급창고입니다. 기둥 없이 공간을 넓게 쓴 목재 트러스 지붕 구조와 근대 철도 도시 대전의 생활사 기록이 살아 숨 쉬는 공간입니다.',
+        source: '국가유산청 국가유산 디지털 서비스 및 대전도시재생지원센터 기록',
+        reactions: { love: 22, proud: 27, visit: 15 },
+        userReacted: { love: false, proud: false, visit: false },
+        comments: [
+          { id: 'c3', nickname: '기차여행자', animalId: 'horse', stageStep: 2, frameId: 'red', text: '대전역 동광장 지나갈 때마다 보던 근대 건축물인데 3D로 보니 더 반갑네요!', date: '2026.11.12' }
+        ],
+        createdAt: 1731400000002
+      },
+      {
+        id: 'A03',
+        title: '안동 하회별신굿탈놀이와 마을 장승',
+        regionGroup: '경상',
+        location: '경상북도 안동시 풍천면 하회리',
+        lat: 36.5389,
+        lng: 128.5181,
+        category: '무형유산',
+        subCategory: '민속·마을축제',
+        presetType: 'intangible',
+        meshColor: '#a855f7',
+        hasGoldenAura: true,
+        registrant: {
+          nickname: '하회탈장인',
+          animalId: 'tiger',
+          stageStep: 4,
+          frameId: 'red',
+          accessoryId: 'gat'
+        },
+        story: '마을의 안녕과 풍년을 기원하며 공동체가 함께 어우러지던 하회별신굿탈놀이와 마을 입구 장승입니다. 해학적인 탈의 표정 속에 담긴 선조들의 웃음과 공동체 정신을 자랑하고 싶습니다.',
+        source: '국가유산청 국가유산포털 국가무형유산 자료',
+        reactions: { love: 31, proud: 29, visit: 24 },
+        userReacted: { love: false, proud: false, visit: false },
+        comments: [
+          { id: 'c4', nickname: '탈춤사랑', animalId: 'monkey', stageStep: 2, frameId: 'yellow', text: '보는 각도에 따라 웃고 우는 하회탈의 조형미가 최고예요!', date: '2026.11.11' }
+        ],
+        createdAt: 1731400000003
+      },
+      {
+        id: 'A04',
+        title: '제주 거문오름 용암동굴계와 돌문화 경관',
+        regionGroup: '제주',
+        location: '제주특별자치도 제주시 조천읍 선흘리 산 102-1',
+        lat: 33.4522,
+        lng: 126.7125,
+        category: '자연유산',
+        subCategory: '명승·자연경관',
+        presetType: 'nature',
+        meshColor: '#10b981',
+        hasGoldenAura: false,
+        registrant: {
+          nickname: '제주당산지기',
+          animalId: 'horse',
+          stageStep: 1,
+          frameId: 'white',
+          accessoryId: 'sprout'
+        },
+        story: '해발 456m, 둘레 4,551m의 거문오름은 용암동굴계를 형성한 모체로 2007년 유네스코 세계자연유산에 등재된 제주의 생태 보물입니다. 바람을 다스리는 돌담·돌하르방 문화와 어우러진 자연유산입니다.',
+        source: '비짓제주 및 국가유산청 세계자연유산본부',
+        reactions: { love: 35, proud: 41, visit: 38 },
+        userReacted: { love: false, proud: false, visit: false },
+        comments: [
+          { id: 'c5', nickname: '오름산책', animalId: 'dog', stageStep: 1, frameId: 'blue', text: '거문오름 숲길의 곶자왈 생태는 언제 가도 신비로워요.', date: '2026.11.13' }
+        ],
+        createdAt: 1731400000004
+      },
+      {
+        id: 'A05',
+        title: '전주 전통 한지장(韓紙匠)과 한지 서첩',
+        regionGroup: '전라',
+        location: '전북특별자치도 전주시 완산구 한옥마을 일원',
+        lat: 35.8147,
+        lng: 127.1526,
+        category: '무형유산',
+        subCategory: '전통기술·공예',
+        presetType: 'ceramic',
+        meshColor: '#f8fafc',
+        hasGoldenAura: false,
+        registrant: {
+          nickname: '천년한지손길',
+          animalId: 'rabbit',
+          stageStep: 3,
+          frameId: 'yellow',
+          accessoryId: 'scholar'
+        },
+        story: '닥나무 껍질을 삶고 두드려 외발뜨기 기법으로 천년을 가는 종이를 떠내는 국가무형유산 한지장 기술입니다. 기록유산 복원과 보존의 토대가 되는 우리 전통 한지의 우수성을 함께 나누고 싶습니다.',
+        source: '국가유산청 국가무형유산 한지장 종목 자료',
+        reactions: { love: 26, proud: 33, visit: 21 },
+        userReacted: { love: false, proud: false, visit: false },
+        comments: [
+          { id: 'c6', nickname: '지류보존학도', animalId: 'rooster', stageStep: 3, frameId: 'yellow', text: '비단 오백 년, 종이 천 년이라는 말처럼 우리 전통 한지의 보존성은 세계 최고입니다!', date: '2026.11.13' }
+        ],
+        createdAt: 1731400000005
+      }
+    ];
+
+    const PRESET_MODELS_INFO = [
+      { id: 'architecture', name: '🏯 석탑·전통건축', desc: '다층 석탑 및 성곽 누각' },
+      { id: 'archive', name: '📜 고문서·한지서첩', desc: '전통 고서첩 및 기록물 쇼케이스' },
+      { id: 'intangible', name: '🎭 전통 탈·장구', desc: '전통 탈과 민속 연희 공예' },
+      { id: 'nature', name: '🌲 당산나무·오름', desc: '노거수 당산나무와 기암괴석' },
+      { id: 'ceramic', name: '🏺 청자·한지공예', desc: '전통 도자기 및 공예 유물' },
+      { id: 'incense', name: '✨ 금동대향로(보상)', desc: '150P 수호자 달성 스페셜 프리셋', lockedUntil150: true }
+    ];
+
+    const PRESET_COLORS = [
+      { hex: '#d97706', name: '황토·금동색' },
+      { hex: '#38bdf8', name: '비색·청자색' },
+      { hex: '#f8fafc', name: '유백·한지색' },
+      { hex: '#10b981', name: '비취·녹림색' },
+      { hex: '#a855f7', name: '단청·보라색' },
+      { hex: '#ef4444', name: '주홍·단청색' }
+    ];
+
+    // App State
+    let state = {
+      user: {
+        nickname: '우리동네탐험가',
+        animalId: 'rooster',
+        stageStep: 1,
+        frameId: 'yellow',
+        accessoryId: 'none'
+      },
+      points: 0,
+      stamps: { '문화유산': false, '자연유산': false, '무형유산': false },
+      reactedItemIds: [],
+      commentCountByUser: 0,
+      registeredCountByUser: 0,
+      missions: {
+        m0_avatar: false,
+        m1_stamps: false,
+        m2_reactions: false,
+        m3_comments: false,
+        m4_register: false
+      },
+      filterCat: 'all',
+      filterRegion: 'all',
+      sortBy: 'popular',
+      searchQuery: '',
+      items: JSON.parse(JSON.stringify(INITIAL_HERITAGE_ITEMS)),
+      activeItemId: null,
+      // Registration modal state
+      regMode: 'preset', // 'preset' | 'glb'
+      regPresetType: 'architecture',
+      regColor: '#d97706',
+      regTextureDataUrl: null,
+      regUploadedGlbScene: null
+    };
+
+    // Load saved state from localStorage safely
+    function loadSavedState() {
+      try {
+        const raw = localStorage.getItem('heritage_3d_exhibition_state_v2');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.user && Array.isArray(parsed.items)) {
+            state.user = { ...state.user, ...parsed.user };
+            state.points = Number(parsed.points) || 0;
+            state.stamps = { ...state.stamps, ...(parsed.stamps || {}) };
+            state.reactedItemIds = Array.isArray(parsed.reactedItemIds) ? parsed.reactedItemIds : [];
+            state.commentCountByUser = Number(parsed.commentCountByUser) || 0;
+            state.registeredCountByUser = Number(parsed.registeredCountByUser) || 0;
+            state.missions = { ...state.missions, ...(parsed.missions || {}) };
+            state.items = parsed.items;
+          }
+        }
+      } catch (err) {
+        // Ignore storage errors in sandboxed context
+      }
+    }
+
+    function saveState() {
+      try {
+        const serializable = {
+          user: state.user,
+          points: state.points,
+          stamps: state.stamps,
+          reactedItemIds: state.reactedItemIds,
+          commentCountByUser: state.commentCountByUser,
+          registeredCountByUser: state.registeredCountByUser,
+          missions: state.missions,
+          items: state.items
+        };
+        localStorage.setItem('heritage_3d_exhibition_state_v2', JSON.stringify(serializable));
+      } catch (err) {
+        // Ignore storage errors
+      }
+    }
+
+    // =========================================================================
+    // 3. GAMIFICATION & TOAST HELPERS
+    // =========================================================================
+    function getLevelInfo(pts) {
+      if (pts >= 240) return { level: 4, title: 'Lv.4 명예 유산 학예사' };
+      if (pts >= 150) return { level: 3, title: 'Lv.3 국가유산 수호자' };
+      if (pts >= 50) return { level: 2, title: 'Lv.2 유산 탐험가' };
+      return { level: 1, title: 'Lv.1 마을 나그네' };
+    }
+
+    function showToast(title, subtitle, icon = '✨') {
+      const container = document.getElementById('toastContainer');
+      if (!container) return;
+      const el = document.createElement('div');
+      el.className = 'pointer-events-auto bg-slate-900/95 border border-amber-400/60 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 transform transition-all duration-300';
+      el.innerHTML = `
+        <div class="text-2xl">${icon}</div>
+        <div class="flex-1 min-w-0">
+          <div class="text-xs font-extrabold text-amber-300">${title}</div>
+          <div class="text-[11px] text-slate-200 mt-0.5">${subtitle}</div>
+        </div>
+      `;
+      container.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(-8px)';
+        setTimeout(() => el.remove(), 300);
+      }, 3400);
+    }
+
+    function awardPoints(amount, reasonTitle, reasonSub) {
+      const prevLevel = getLevelInfo(state.points).level;
+      state.points += amount;
+      const newLevelInfo = getLevelInfo(state.points);
+      showToast(`${reasonTitle} (+${amount}P)`, reasonSub, '🎉');
+      if (newLevelInfo.level > prevLevel) {
+        setTimeout(() => {
+          showToast(`등급 승급! ${newLevelInfo.title}`, newLevelInfo.level >= 3 ? '🏆 3D 국가유산 수호패와 금동대향로 프리셋이 해금되었습니다!' : '탐험 등급이 한 단계 올라갔습니다!', '👑');
+        }, 600);
+      }
+      saveState();
+      updateHeaderAndGamificationUI();
+    }
+
+    // =========================================================================
+    // 4. PROCEDURAL 3D HERITAGE MESH BUILDER (THREE.JS r128)
+    // =========================================================================
+    function createHeritage3DMeshGroup(presetType, colorHex = '#d97706', hasGoldenAura = false, textureDataUrl = null) {
+      const group = new THREE.Group();
+      const mainColor = new THREE.Color(colorHex || '#d97706');
+
+      // Base pedestal
+      const baseGeo = new THREE.CylinderGeometry(1.15, 1.35, 0.32, 24);
+      const baseMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4, metalness: 0.3 });
+      const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+      baseMesh.position.y = 0.16;
+      group.add(baseMesh);
+
+      const mainMat = new THREE.MeshStandardMaterial({
+        color: mainColor,
+        roughness: 0.35,
+        metalness: presetType === 'incense' ? 0.8 : 0.25
+      });
+
+      if (presetType === 'architecture') {
+        // Multi-tiered Korean stone pagoda / fortress pavilion
+        for (let i = 0; i < 3; i++) {
+          const w = 1.15 - i * 0.24;
+          const body = new THREE.Mesh(new THREE.BoxGeometry(w, 0.42, w), mainMat);
+          body.position.y = 0.52 + i * 0.62;
+          group.add(body);
+
+          const roof = new THREE.Mesh(
+            new THREE.ConeGeometry(w * 0.92, 0.28, 4),
+            new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5 })
+          );
+          roof.rotation.y = Math.PI / 4;
+          roof.position.y = 0.82 + i * 0.62;
+          group.add(roof);
+        }
+        const finial = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.05, 0.12, 0.45, 12),
+          new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.8, roughness: 0.2 })
+        );
+        finial.position.y = 2.38;
+        group.add(finial);
+      } else if (presetType === 'archive') {
+        // Traditional Hanji archival book & scroll on a wooden reading stand
+        const stand = new THREE.Mesh(
+          new THREE.BoxGeometry(1.4, 0.12, 1.0),
+          new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.6 })
+        );
+        stand.position.y = 0.75;
+        stand.rotation.x = 0.28;
+        group.add(stand);
+
+        let coverMat = mainMat;
+        if (textureDataUrl) {
+          const tex = new THREE.TextureLoader().load(textureDataUrl);
+          coverMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.4 });
+        }
+        const book = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.18, 0.82), coverMat);
+        book.position.set(0, 0.88, 0.02);
+        book.rotation.x = 0.28;
+        group.add(book);
+
+        const scroll = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.14, 0.14, 1.25, 16),
+          new THREE.MeshStandardMaterial({ color: 0xfef3c7, roughness: 0.5 })
+        );
+        scroll.rotation.z = Math.PI / 2;
+        scroll.position.set(0, 1.45, 0);
+        group.add(scroll);
+      } else if (presetType === 'intangible') {
+        // Traditional Hahoe Mask & Janggu drum shape
+        const mask = new THREE.Mesh(new THREE.SphereGeometry(0.75, 24, 24), mainMat);
+        mask.scale.set(0.95, 1.2, 0.55);
+        mask.position.y = 1.4;
+        group.add(mask);
+
+        const smileGeo = new THREE.TorusGeometry(0.32, 0.05, 12, 24, Math.PI);
+        const smileMat = new THREE.MeshStandardMaterial({ color: 0x0f172a });
+        const smile = new THREE.Mesh(smileGeo, smileMat);
+        smile.rotation.x = Math.PI;
+        smile.position.set(0, 1.25, 0.38);
+        group.add(smile);
+
+        const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.1), smileMat);
+        eyeL.position.set(-0.24, 1.55, 0.38);
+        eyeL.rotation.z = 0.2;
+        const eyeR = eyeL.clone();
+        eyeR.position.x = 0.24;
+        eyeR.rotation.z = -0.2;
+        group.add(eyeL, eyeR);
+      } else if (presetType === 'nature') {
+        // Sacred village tree (Dangsan tree) & volcanic basalt rocks
+        const trunk = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.22, 0.36, 1.2, 12),
+          new THREE.MeshStandardMaterial({ color: 0x713f12, roughness: 0.8 })
+        );
+        trunk.position.y = 0.9;
+        group.add(trunk);
+
+        const foliageOffsets = [
+          [0, 1.75, 0, 0.78],
+          [-0.45, 1.5, 0.2, 0.52],
+          [0.48, 1.52, -0.15, 0.55],
+          [0, 1.55, -0.42, 0.5]
+        ];
+        foliageOffsets.forEach(([x, y, z, r]) => {
+          const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 1), mainMat);
+          crown.position.set(x, y, z);
+          group.add(crown);
+        });
+      } else if (presetType === 'incense') {
+        // Special Reward: Baekje Gilt-Bronze Incense Burner (금동대향로)
+        const goldMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.85, roughness: 0.18 });
+        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.42, 0.65, 16), goldMat);
+        stem.position.y = 0.62;
+        const bowl = new THREE.Mesh(new THREE.SphereGeometry(0.68, 24, 18), goldMat);
+        bowl.position.y = 1.32;
+        const lid = new THREE.Mesh(new THREE.ConeGeometry(0.68, 0.85, 16), goldMat);
+        lid.position.y = 1.95;
+        const phoenix = new THREE.Mesh(new THREE.OctahedronGeometry(0.24, 1), goldMat);
+        phoenix.position.y = 2.55;
+        group.add(stem, bowl, lid, phoenix);
+      } else {
+        // 'ceramic': Celadon / White porcelain vase & Hanji craft vessel
+        const body = new THREE.Mesh(new THREE.SphereGeometry(0.68, 24, 24), mainMat);
+        body.scale.set(1, 1.25, 1);
+        body.position.y = 1.15;
+        const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.22, 0.55, 20), mainMat);
+        neck.position.y = 1.95;
+        const rim = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.05, 12, 24), mainMat);
+        rim.rotation.x = Math.PI / 2;
+        rim.position.y = 2.22;
+        group.add(body, neck, rim);
+      }
+
+      // Optional photo texture frame beside object if textureDataUrl is provided and presetType !== 'archive'
+      if (textureDataUrl && presetType !== 'archive') {
+        const tex = new THREE.TextureLoader().load(textureDataUrl);
+        const photoPlane = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.9, 0.9),
+          new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide })
+        );
+        photoPlane.position.set(0, 1.35, 0.82);
+        group.add(photoPlane);
+      }
+
+      // Golden Aura halo ring if unlocked/registered
+      if (hasGoldenAura) {
+        const auraRingGeo = new THREE.TorusGeometry(1.45, 0.045, 12, 48);
+        const auraRingMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+        const auraRing = new THREE.Mesh(auraRingGeo, auraRingMat);
+        auraRing.rotation.x = Math.PI / 2;
+        auraRing.position.y = 0.35;
+        auraRing.name = 'auraRing';
+        group.add(auraRing);
+      }
+
+      return group;
+    }
+
+    // =========================================================================
+    // 5. MAIN 3D KOREA MAP SCENE (THREE.JS r128)
+    // =========================================================================
+    let mapScene, mapCamera, mapRenderer, mapControls;
+    let mapMarkersGroup;
+    let mapAutoRotate = true;
+    const marker3DObjects = [];
+
+    // Convert South Korea [lat, lng] (approx lat 33.2~38.3, lng 126.0~129.6) to 3D map coordinates
+    function latLngToMapXZ(lat, lng) {
+      const x = (lng - 127.6) * 4.2;
+      const z = (36.2 - lat) * 4.6;
+      return { x, z };
+    }
+
+    function initMain3DMap() {
+      const container = document.getElementById('mapCanvasContainer');
+      if (!container) return;
+
+      mapScene = new THREE.Scene();
+      mapScene.background = new THREE.Color(0x070d19);
+      mapScene.fog = new THREE.FogExp2(0x070d19, 0.018);
+
+      const w = container.clientWidth || window.innerWidth;
+      const h = container.clientHeight || window.innerHeight;
+      mapCamera = new THREE.PerspectiveCamera(45, w / h, 0.1, 200);
+      mapCamera.position.set(0, 18, 22);
+
+      mapRenderer = new THREE.WebGLRenderer({ antialias: true });
+      mapRenderer.setSize(w, h);
+      mapRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      container.innerHTML = '';
+      container.appendChild(mapRenderer.domElement);
+
+      mapControls = new THREE.OrbitControls(mapCamera, mapRenderer.domElement);
+      mapControls.enableDamping = true;
+      mapControls.dampingFactor = 0.06;
+      mapControls.maxPolarAngle = Math.PI / 2.15;
+      mapControls.minDistance = 7;
+      mapControls.maxDistance = 38;
+      mapControls.autoRotate = true;
+      mapControls.autoRotateSpeed = 0.45;
+
+      // Lights
+      const ambient = new THREE.AmbientLight(0xffffff, 0.75);
+      mapScene.add(ambient);
+
+      const dirLight = new THREE.DirectionalLight(0xfef08a, 0.95);
+      dirLight.position.set(12, 24, 14);
+      mapScene.add(dirLight);
+
+      const rimLight = new THREE.PointLight(0x38bdf8, 0.7, 45);
+      rimLight.position.set(-14, 10, -10);
+      mapScene.add(rimLight);
+
+      // Subtle Sea Grid Floor
+      const gridHelper = new THREE.GridHelper(48, 32, 0x1e293b, 0x0f172a);
+      gridHelper.position.y = -0.25;
+      mapScene.add(gridHelper);
+
+      // Build 3D Extruded South Korea Regional Plates
+      buildKorea3DTerrain();
+
+      mapMarkersGroup = new THREE.Group();
+      mapScene.add(mapMarkersGroup);
+
+      rebuildMapMarkersAndCards();
+
+      window.addEventListener('resize', onMapWindowResize);
+      animateMainMap();
+    }
+
+    function buildKorea3DTerrain() {
+      const terrainGroup = new THREE.Group();
+
+      // Grounded regional polygons in [lat, lng] forming South Korea's 3D silhouette + Jeju + Ulleungdo/Dokdo
+      const regions = [
+        {
+          name: '서울·경기·인천', color: 0x1e293b, border: 0x38bdf8, height: 0.55,
+          coords: [[37.9, 126.6], [38.0, 127.5], [37.1, 127.8], [36.9, 126.8], [37.4, 126.4]]
+        },
+        {
+          name: '강원', color: 0x172554, border: 0x60a5fa, height: 0.72,
+          coords: [[38.0, 127.5], [38.3, 128.4], [37.1, 129.4], [37.1, 127.8]]
+        },
+        {
+          name: '충청', color: 0x1e3a8a, border: 0xfacc15, height: 0.62,
+          coords: [[36.9, 126.8], [37.1, 127.8], [37.1, 128.5], [36.1, 128.0], [36.0, 126.5], [36.7, 126.1]]
+        },
+        {
+          name: '전라', color: 0x064e3b, border: 0x34d399, height: 0.58,
+          coords: [[36.0, 126.5], [36.1, 127.7], [34.8, 127.8], [34.3, 126.5], [35.1, 126.1]]
+        },
+        {
+          name: '경상', color: 0x312e81, border: 0xc084fc, height: 0.66,
+          coords: [[37.1, 128.5], [37.1, 129.4], [35.5, 129.5], [34.8, 128.4], [34.8, 127.8], [36.1, 127.7], [36.1, 128.0]]
+        },
+        {
+          name: '제주', color: 0x065f46, border: 0xfbbf24, height: 0.65,
+          coords: [[33.55, 126.18], [33.56, 126.95], [33.21, 126.88], [33.20, 126.22]]
+        }
+      ];
+
+      regions.forEach(reg => {
+        const shape = new THREE.Shape();
+        reg.coords.forEach(([lat, lng], idx) => {
+          const { x, z } = latLngToMapXZ(lat, lng);
+          // Shape is in XY plane; we rotate X by -PI/2 so Y becomes -Z
+          if (idx === 0) shape.moveTo(x, -z);
+          else shape.lineTo(x, -z);
+        });
+        shape.closePath();
+
+        const extrudeSettings = { depth: reg.height, bevelEnabled: true, bevelSegments: 2, steps: 1, bevelSize: 0.08, bevelThickness: 0.08 };
+        const geo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+        geo.rotateX(-Math.PI / 2);
+
+        const mat = new THREE.MeshStandardMaterial({
+          color: reg.color,
+          roughness: 0.55,
+          metalness: 0.25
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.y = -0.15;
+        terrainGroup.add(mesh);
+
+        // Glowing top border outline
+        const edges = new THREE.EdgesGeometry(geo);
+        const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: reg.border, transparent: true, opacity: 0.45 }));
+        line.position.y = -0.14;
+        terrainGroup.add(line);
+      });
+
+      mapScene.add(terrainGroup);
+    }
+
+    function getFilteredItems() {
+      const q = state.searchQuery.trim().toLowerCase();
+      let list = state.items.filter(item => {
+        if (state.filterCat !== 'all' && item.category !== state.filterCat) return false;
+        if (state.filterRegion !== 'all' && item.regionGroup !== state.filterRegion) return false;
+        if (q) {
+          const hay = `${item.title} ${item.location} ${item.category} ${item.subCategory} ${item.story} ${item.registrant.nickname}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+
+      if (state.sortBy === 'popular') {
+        list.sort((a, b) => {
+          const sumA = a.reactions.love + a.reactions.proud + a.reactions.visit;
+          const sumB = b.reactions.love + b.reactions.proud + b.reactions.visit;
+          return sumB - sumA;
+        });
+      } else if (state.sortBy === 'comments') {
+        list.sort((a, b) => b.comments.length - a.comments.length);
+      } else {
+        list.sort((a, b) => b.createdAt - a.createdAt);
+      }
+      return list;
+    }
+
+    function rebuildMapMarkersAndCards() {
+      if (!mapMarkersGroup) return;
+
+      // Clear existing 3D markers
+      while (mapMarkersGroup.children.length > 0) {
+        mapMarkersGroup.remove(mapMarkersGroup.children[0]);
+      }
+      marker3DObjects.length = 0;
+
+      const pinsOverlay = document.getElementById('mapPinsOverlay');
+      if (pinsOverlay) pinsOverlay.innerHTML = '';
+
+      const filtered = getFilteredItems();
+      const countBadge = document.getElementById('filteredCountBadge');
+      if (countBadge) countBadge.textContent = `${filtered.length}점`;
+
+      filtered.forEach((item, index) => {
+        const { x, z } = latLngToMapXZ(item.lat, item.lng);
+        // Offset slightly if multiple markers share exact same coordinates
+        const offsetAngle = index * 1.1;
+        const finalX = x + Math.cos(offsetAngle) * 0.18;
+        const finalZ = z + Math.sin(offsetAngle) * 0.18;
+
+        const meshGroup = createHeritage3DMeshGroup(item.presetType, item.meshColor, item.hasGoldenAura, item.textureDataUrl);
+        meshGroup.scale.set(0.45, 0.45, 0.45);
+        meshGroup.position.set(finalX, 0.6, finalZ);
+        mapMarkersGroup.add(meshGroup);
+
+        // Create HTML floating pin button
+        const pinEl = document.createElement('button');
+        pinEl.type = 'button';
+        const catBorder = item.category === '문화유산' ? 'border-amber-400' : item.category === '자연유산' ? 'border-emerald-400' : 'border-purple-400';
+        const auraClass = item.hasGoldenAura ? 'golden-aura-pin' : '';
+        pinEl.className = `map-pin-label absolute bg-slate-900/95 hover:bg-slate-800 border-2 ${catBorder} ${auraClass} rounded-2xl px-2.5 py-1.5 shadow-xl flex items-center gap-2 text-left`;
+        const avatarSvg = renderZodiacAvatarSVG(
+          item.registrant.animalId,
+          item.registrant.stageStep,
+          item.registrant.frameId,
+          item.registrant.accessoryId
+        );
+        const totalReacts = item.reactions.love + item.reactions.proud + item.reactions.visit;
+        pinEl.innerHTML = `
+          <div class="w-7 h-7 rounded-full overflow-hidden flex-shrink-0 border border-slate-600 bg-slate-950">${avatarSvg}</div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-1">
+              <span class="text-[10px] font-extrabold text-amber-300">${item.category.slice(0, 2)}</span>
+              ${item.hasGoldenAura ? '<span class="text-[10px]">✨</span>' : ''}
+              <span class="text-xs font-extrabold text-white truncate max-w-[115px]">${item.title}</span>
+            </div>
+            <div class="text-[10px] text-slate-400 flex items-center gap-1.5">
+              <span>❤️ ${totalReacts}</span>
+              <span>💬 ${item.comments.length}</span>
+            </div>
+          </div>
+        `;
+        pinEl.addEventListener('click', () => openHeritageDetailModal(item.id));
+        if (pinsOverlay) pinsOverlay.appendChild(pinEl);
+
+        marker3DObjects.push({
+          item,
+          meshGroup,
+          pinEl,
+          worldPos: new THREE.Vector3(finalX, 1.9, finalZ)
+        });
+      });
+
+      renderBottomCards(filtered);
+    }
+
+    function renderBottomCards(filtered) {
+      const slider = document.getElementById('heritageCardsSlider');
+      if (!slider) return;
+      slider.innerHTML = '';
+
+      if (filtered.length === 0) {
+        slider.innerHTML = `
+          <div class="w-full py-6 text-center text-xs text-slate-400 bg-slate-900/70 rounded-2xl border border-slate-800">
+            검색 조건에 맞는 3D 국가유산이 없습니다. 다른 검색어나 분류를 선택해 보세요!
+          </div>
+        `;
+        return;
+      }
+
+      filtered.forEach(item => {
+        const isCategoryUnvisited = !state.stamps[item.category];
+        const totalReacts = item.reactions.love + item.reactions.proud + item.reactions.visit;
+        const avatarSvg = renderZodiacAvatarSVG(
+          item.registrant.animalId,
+          item.registrant.stageStep,
+          item.registrant.frameId,
+          item.registrant.accessoryId
+        );
+        const card = document.createElement('div');
+        card.className = 'min-w-[250px] max-w-[270px] bg-slate-900/95 hover:bg-slate-800/95 border border-slate-800 hover:border-amber-400/60 rounded-2xl p-3 flex flex-col justify-between cursor-pointer transition shadow-lg flex-shrink-0';
+        card.innerHTML = `
+          <div>
+            <div class="flex items-center justify-between gap-1 mb-1.5">
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                item.category === '문화유산' ? 'bg-amber-500/20 text-amber-300' :
+                item.category === '자연유산' ? 'bg-emerald-500/20 text-emerald-300' :
+                'bg-purple-500/20 text-purple-300'
+              }">${item.category} · ${item.subCategory}</span>
+              ${isCategoryUnvisited ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">🎯 미션추천</span>' : ''}
+            </div>
+            <h3 class="text-xs sm:text-sm font-extrabold text-white truncate">${item.title}</h3>
+            <p class="text-[11px] text-slate-400 truncate mt-0.5">${item.location}</p>
+            <p class="text-[11px] text-slate-300 line-clamp-2 mt-1.5 leading-relaxed">${item.story}</p>
+          </div>
+          <div class="mt-2.5 pt-2 border-t border-slate-800/90 flex items-center justify-between">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <div class="w-6 h-6 rounded-full overflow-hidden border border-amber-400/50 bg-slate-950 flex-shrink-0">${avatarSvg}</div>
+              <span class="text-[11px] text-slate-300 font-semibold truncate">${item.registrant.nickname}</span>
+            </div>
+            <div class="flex items-center gap-2 text-[11px] text-amber-300 font-bold flex-shrink-0">
+              <span>❤️ ${totalReacts}</span>
+              <span>💬 ${item.comments.length}</span>
+            </div>
+          </div>
+        `;
+        card.addEventListener('click', () => openHeritageDetailModal(item.id));
+        slider.appendChild(card);
+      });
+    }
+
+    function updateFloatingPinPositions() {
+      if (!mapCamera || !mapRenderer) return;
+      const width = mapRenderer.domElement.clientWidth;
+      const height = mapRenderer.domElement.clientHeight;
+      const projVec = new THREE.Vector3();
+
+      marker3DObjects.forEach((obj, idx) => {
+        // Bobbing & rotation animation on 3D mesh
+        obj.meshGroup.rotation.y += 0.012;
+        obj.meshGroup.position.y = 0.6 + Math.sin(Date.now() * 0.0025 + idx) * 0.08;
+
+        projVec.copy(obj.worldPos);
+        projVec.project(mapCamera);
+
+        const screenX = (projVec.x * 0.5 + 0.5) * width;
+        const screenY = (-(projVec.y * 0.5) + 0.5) * height;
+
+        if (projVec.z > 1 || screenX < -60 || screenX > width + 60 || screenY < -60 || screenY > height + 60) {
+          obj.pinEl.style.display = 'none';
+        } else {
+          obj.pinEl.style.display = 'flex';
+          obj.pinEl.style.left = `${screenX}px`;
+          obj.pinEl.style.top = `${screenY}px`;
+        }
+      });
+    }
+
+    function animateMainMap() {
+      requestAnimationFrame(animateMainMap);
+      if (mapControls) mapControls.update();
+      updateFloatingPinPositions();
+      if (mapRenderer && mapScene && mapCamera) {
+        mapRenderer.render(mapScene, mapCamera);
+      }
+    }
+
+    function onMapWindowResize() {
+      const container = document.getElementById('mapCanvasContainer');
+      if (!container || !mapCamera || !mapRenderer) return;
+      const w = container.clientWidth || window.innerWidth;
+      const h = container.clientHeight || window.innerHeight;
+      mapCamera.aspect = w / h;
+      mapCamera.updateProjectionMatrix();
+      mapRenderer.setSize(w, h);
+    }
+
+    // =========================================================================
+    // 6. 3D HERITAGE DETAIL VIEWER MODAL & REACTIONS/COMMENTS
+    // =========================================================================
+    let detailScene, detailCamera, detailRenderer, detailControls, detailMeshGroup, detailAnimId;
+    let detailAutoRotate = true;
+    let detailLightMode = 0; // 0: 주간 자연광, 1: 야간 달빛, 2: 박물관 핀조명
+    let detailAmbientLight, detailDirLight;
+
+    function openHeritageDetailModal(itemId) {
+      const item = state.items.find(i => i.id === itemId);
+      if (!item) return;
+      state.activeItemId = itemId;
+
+      // Move main map camera smoothly toward item
+      const { x, z } = latLngToMapXZ(item.lat, item.lng);
+      if (mapControls) {
+        mapControls.target.set(x, 0.5, z);
+      }
+
+      // Check Stamp & Mission 1 (삼색 국가유산 탐험가)
+      if (!state.stamps[item.category]) {
+        state.stamps[item.category] = true;
+        showToast(`${item.category} 도감 스탬프 획득!`, `처음으로 [${item.category}] 영역 유산을 3D로 감상하셨습니다.`, '💮');
+        if (state.stamps['문화유산'] && state.stamps['자연유산'] && state.stamps['무형유산'] && !state.missions.m1_stamps) {
+          state.missions.m1_stamps = true;
+          awardPoints(50, '미션 1 완료: 삼색 국가유산 탐험가', '문화·자연·무형유산을 모두 감상하여 [🎩 전통 갓] 장식이 해금되었습니다!');
+        } else {
+          saveState();
+          updateHeaderAndGamificationUI();
+        }
+      }
+
+      // Populate modal metadata
+      document.getElementById('detailCatBadge').textContent = item.category;
+      document.getElementById('detailSubCatBadge').textContent = item.subCategory;
+      const auraBadge = document.getElementById('detailAuraBadge');
+      if (item.hasGoldenAura) auraBadge.classList.remove('hidden');
+      else auraBadge.classList.add('hidden');
+
+      document.getElementById('detailRegionText').textContent = item.location;
+      document.getElementById('detailTitleText').textContent = item.title;
+      document.getElementById('detailStoryText').textContent = item.story;
+      document.getElementById('detailCoordText').textContent = `북위 ${item.lat.toFixed(4)}°, 동경 ${item.lng.toFixed(4)}°`;
+      document.getElementById('detailSourceText').textContent = item.source;
+
+      const presetObj = PRESET_MODELS_INFO.find(p => p.id === item.presetType);
+      document.getElementById('detailModelTypeLabel').textContent = item.customGlbName
+        ? `3D 모델: 사용자 업로드 (${item.customGlbName})`
+        : `3D 모델: ${presetObj ? presetObj.name : '전통 3D 프리셋'}`;
+
+      // Registrant Zodiac Avatar
+      const regAnimal = ZODIAC_DATA.find(a => a.id === item.registrant.animalId) || ZODIAC_DATA[0];
+      const regStage = regAnimal.stages.find(s => s.step === Number(item.registrant.stageStep)) || regAnimal.stages[0];
+      document.getElementById('detailRegistrantAvatar').innerHTML = renderZodiacAvatarSVG(
+        item.registrant.animalId,
+        item.registrant.stageStep,
+        item.registrant.frameId,
+        item.registrant.accessoryId
+      );
+      document.getElementById('detailRegistrantName').textContent = item.registrant.nickname;
+      document.getElementById('detailRegistrantZodiacLabel').textContent = `${regAnimal.kr} · ${regStage.name}`;
+
+      updateDetailReactionsUI(item);
+      renderDetailCommentsList(item);
+
+      const modal = document.getElementById('detailModal');
+      modal.classList.remove('hidden');
+
+      setTimeout(() => {
+        initDetail3DViewer(item);
+      }, 60);
+    }
+
+    function initDetail3DViewer(item) {
+      const container = document.getElementById('detail3DCanvasContainer');
+      if (!container) return;
+      if (detailAnimId) cancelAnimationFrame(detailAnimId);
+
+      const w = container.clientWidth || 480;
+      const h = container.clientHeight || 380;
+
+      detailScene = new THREE.Scene();
+      detailScene.background = new THREE.Color(0x050914);
+
+      detailCamera = new THREE.PerspectiveCamera(42, w / h, 0.1, 100);
+      detailCamera.position.set(0, 2.4, 4.8);
+
+      detailRenderer = new THREE.WebGLRenderer({ antialias: true });
+      detailRenderer.setSize(w, h);
+      detailRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      container.innerHTML = '';
+      container.appendChild(detailRenderer.domElement);
+
+      detailControls = new THREE.OrbitControls(detailCamera, detailRenderer.domElement);
+      detailControls.enableDamping = true;
+      detailControls.target.set(0, 1.15, 0);
+      detailControls.autoRotate = detailAutoRotate;
+      detailControls.autoRotateSpeed = 2.0;
+
+      detailAmbientLight = new THREE.AmbientLight(0xffffff, 0.85);
+      detailScene.add(detailAmbientLight);
+
+      detailDirLight = new THREE.DirectionalLight(0xfef08a, 1.15);
+      detailDirLight.position.set(5, 8, 6);
+      detailScene.add(detailDirLight);
+
+      const floorGrid = new THREE.GridHelper(8, 16, 0x334155, 0x1e293b);
+      detailScene.add(floorGrid);
+
+      detailMeshGroup = createHeritage3DMeshGroup(item.presetType, item.meshColor, item.hasGoldenAura, item.textureDataUrl);
+      detailScene.add(detailMeshGroup);
+
+      function animateDetail() {
+        detailAnimId = requestAnimationFrame(animateDetail);
+        if (detailControls) detailControls.update();
+        if (detailRenderer && detailScene && detailCamera) {
+          detailRenderer.render(detailScene, detailCamera);
+        }
+      }
+      animateDetail();
+    }
+
+    function updateDetailReactionsUI(item) {
+      document.getElementById('countReactLove').textContent = item.reactions.love;
+      document.getElementById('countReactProud').textContent = item.reactions.proud;
+      document.getElementById('countReactVisit').textContent = item.reactions.visit;
+
+      const mapBtn = [
+        ['btnReactLove', item.userReacted && item.userReacted.love],
+        ['btnReactProud', item.userReacted && item.userReacted.proud],
+        ['btnReactVisit', item.userReacted && item.userReacted.visit]
+      ];
+      mapBtn.forEach(([btnId, active]) => {
+        const btn = document.getElementById(btnId);
+        if (!btn) return;
+        if (active) {
+          btn.classList.add('border-amber-400', 'bg-amber-500/20');
+        } else {
+          btn.classList.remove('border-amber-400', 'bg-amber-500/20');
+        }
+      });
+    }
+
+    function handleReactionClick(type) {
+      const item = state.items.find(i => i.id === state.activeItemId);
+      if (!item) return;
+      if (!item.userReacted) item.userReacted = { love: false, proud: false, visit: false };
+
+      if (item.userReacted[type]) {
+        item.userReacted[type] = false;
+        item.reactions[type] = Math.max(0, item.reactions[type] - 1);
+      } else {
+        item.userReacted[type] = true;
+        item.reactions[type] += 1;
+
+        if (!state.reactedItemIds.includes(item.id)) {
+          state.reactedItemIds.push(item.id);
+        }
+        awardPoints(10, '유산 공감 표현', `[${item.title}]에 따뜻한 공감을 남겼습니다.`);
+
+        if (state.reactedItemIds.length >= 3 && !state.missions.m2_reactions) {
+          state.missions.m2_reactions = true;
+          showToast('소통 미션 2 완료: 따뜻한 공감의 손길!', '서로 다른 유산 3점에 공감을 남겨 미션을 달성했습니다!', '✨');
+        }
+      }
+
+      saveState();
+      updateDetailReactionsUI(item);
+      rebuildMapMarkersAndCards();
+      updateHeaderAndGamificationUI();
+    }
+
+    function renderDetailCommentsList(item) {
+      const listEl = document.getElementById('detailCommentsList');
+      const countEl = document.getElementById('detailCommentCount');
+      if (countEl) countEl.textContent = `(${item.comments.length})`;
+      if (!listEl) return;
+      listEl.innerHTML = '';
+
+      item.comments.slice().reverse().forEach(c => {
+        const avatarSvg = renderZodiacAvatarSVG(c.animalId || 'rooster', c.stageStep || 1, c.frameId || 'yellow', c.accessoryId || 'none');
+        const row = document.createElement('div');
+        row.className = 'bg-slate-800/75 border border-slate-700/80 rounded-xl p-2.5 flex items-start gap-2.5';
+        row.innerHTML = `
+          <div class="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 border border-amber-400/50 bg-slate-950">${avatarSvg}</div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center justify-between gap-1">
+              <span class="text-xs font-bold text-white">${c.nickname} ${c.isExcellent ? '🏅' : ''}</span>
+              <span class="text-[10px] text-slate-400">${c.date}</span>
+            </div>
+            <p class="text-xs text-slate-200 mt-0.5 break-words">${c.text}</p>
+          </div>
+        `;
+        listEl.appendChild(row);
+      });
+    }
+
+    function handleAddComment() {
+      const input = document.getElementById('commentInput');
+      if (!input) return;
+      const text = input.value.trim();
+      if (!text) {
+        showToast('댓글 내용을 입력해 주세요', '유산에 대한 감상평이나 응원 한마디를 적어주세요.', '💬');
+        return;
+      }
+      const item = state.items.find(i => i.id === state.activeItemId);
+      if (!item) return;
+
+      state.commentCountByUser += 1;
+      const isExcellent = state.commentCountByUser >= 2;
+      if (isExcellent && !state.missions.m3_comments) {
+        state.missions.m3_comments = true;
+        showToast('소통 미션 3 완료: 마을 이야기꾼!', '응원 댓글 2건 이상 작성하여 [🏅우수 관람자] 배지를 획득했습니다!', '🏅');
+      }
+
+      item.comments.push({
+        id: 'c_' + Date.now(),
+        nickname: state.user.nickname,
+        animalId: state.user.animalId,
+        stageStep: state.user.stageStep,
+        frameId: state.user.frameId,
+        accessoryId: state.user.accessoryId,
+        isExcellent,
+        text,
+        date: '2026.11.13'
+      });
+
+      input.value = '';
+      awardPoints(30, '응원 댓글 등록', `[${item.title}]에 내 십이지신 아이콘과 함께 댓글이 등록되었습니다.`);
+      renderDetailCommentsList(item);
+      rebuildMapMarkersAndCards();
+    }
+
+    // =========================================================================
+    // 7. DUAL-MODE 3D HERITAGE REGISTRATION MODAL ('우리 동네 3D 유산 자랑하기')
+    // =========================================================================
+    let regScene, regCamera, regRenderer, regControls, regPreviewGroup, regAnimId;
+
+    function openRegisterModal() {
+      const modal = document.getElementById('registerModal');
+      if (!modal) return;
+      modal.classList.remove('hidden');
+      renderRegisterPresetControls();
+      setTimeout(() => {
+        initRegister3DPreview();
+      }, 60);
+    }
+
+    function renderRegisterPresetControls() {
+      const modelBtns = document.getElementById('presetModelButtons');
+      if (modelBtns) {
+        modelBtns.innerHTML = '';
+        const isIncenseUnlocked = state.points >= 150 || Object.values(state.missions).every(Boolean);
+        PRESET_MODELS_INFO.forEach(m => {
+          const locked = m.lockedUntil150 && !isIncenseUnlocked;
+          const active = state.regPresetType === m.id;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `p-2 rounded-xl border text-left transition ${
+            active
+              ? 'bg-amber-500/20 border-amber-400 text-white'
+              : locked
+                ? 'bg-slate-900/50 border-slate-800 text-slate-500 cursor-not-allowed'
+                : 'bg-slate-900 hover:bg-slate-800 border-slate-700 text-slate-200'
+          }`;
+          btn.innerHTML = `
+            <div class="text-xs font-bold">${m.name} ${locked ? '🔒' : ''}</div>
+            <div class="text-[10px] text-slate-400 truncate mt-0.5">${m.desc}</div>
+          `;
+          btn.addEventListener('click', () => {
+            if (locked) {
+              showToast('스페셜 3D 프리셋 잠금 안내', '누적 150P 이상 달성 시 [✨백제 금동대향로] 프리셋이 해금됩니다!', '🔒');
+              return;
+            }
+            state.regPresetType = m.id;
+            renderRegisterPresetControls();
+            refreshRegister3DPreviewMesh();
+          });
+          modelBtns.appendChild(btn);
+        });
+      }
+
+      const colorBtns = document.getElementById('presetColorButtons');
+      if (colorBtns) {
+        colorBtns.innerHTML = '';
+        PRESET_COLORS.forEach(c => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.title = c.name;
+          btn.className = `w-7 h-7 rounded-full border-2 transition ${state.regColor === c.hex ? 'border-white scale-110' : 'border-slate-600'}`;
+          btn.style.backgroundColor = c.hex;
+          btn.addEventListener('click', () => {
+            state.regColor = c.hex;
+            renderRegisterPresetControls();
+            refreshRegister3DPreviewMesh();
+          });
+          colorBtns.appendChild(btn);
+        });
+      }
+    }
+
+    function initRegister3DPreview() {
+      const container = document.getElementById('register3DPreviewContainer');
+      if (!container) return;
+      if (regAnimId) cancelAnimationFrame(regAnimId);
+
+      const w = container.clientWidth || 380;
+      const h = container.clientHeight || 220;
+
+      regScene = new THREE.Scene();
+      regScene.background = new THREE.Color(0x050914);
+
+      regCamera = new THREE.PerspectiveCamera(42, w / h, 0.1, 100);
+      regCamera.position.set(0, 2.2, 4.4);
+
+      regRenderer = new THREE.WebGLRenderer({ antialias: true });
+      regRenderer.setSize(w, h);
+      regRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      container.innerHTML = '';
+      container.appendChild(regRenderer.domElement);
+
+      regControls = new THREE.OrbitControls(regCamera, regRenderer.domElement);
+      regControls.enableDamping = true;
+      regControls.target.set(0, 1.1, 0);
+      regControls.autoRotate = true;
+      regControls.autoRotateSpeed = 2.4;
+
+      regScene.add(new THREE.AmbientLight(0xffffff, 0.85));
+      const dLight = new THREE.DirectionalLight(0xfef08a, 1.1);
+      dLight.position.set(4, 8, 5);
+      regScene.add(dLight);
+
+      regPreviewGroup = new THREE.Group();
+      regScene.add(regPreviewGroup);
+      refreshRegister3DPreviewMesh();
+
+      function animateReg() {
+        regAnimId = requestAnimationFrame(animateReg);
+        if (regControls) regControls.update();
+        if (regRenderer && regScene && regCamera) {
+          regRenderer.render(regScene, regCamera);
+        }
+      }
+      animateReg();
+    }
+
+    function refreshRegister3DPreviewMesh() {
+      if (!regPreviewGroup) return;
+      while (regPreviewGroup.children.length > 0) {
+        regPreviewGroup.remove(regPreviewGroup.children[0]);
+      }
+      if (state.regMode === 'glb' && state.regUploadedGlbScene) {
+        regPreviewGroup.add(state.regUploadedGlbScene.clone());
+      } else {
+        const mesh = createHeritage3DMeshGroup(state.regPresetType, state.regColor, true, state.regTextureDataUrl);
+        regPreviewGroup.add(mesh);
+      }
+    }
+
+    function handleSubmitHeritageRegistration() {
+      const regVal = document.getElementById('regRegionSelect').value;
+      const [regionGroup, latStr, lngStr, cityLabel] = regVal.split('|');
+      const townDetail = document.getElementById('regTownDetailInput').value.trim();
+      const title = document.getElementById('regTitleInput').value.trim();
+      const category = document.getElementById('regCategorySelect').value;
+      const subCategory = document.getElementById('regSubCategorySelect').value;
+      const story = document.getElementById('regStoryInput').value.trim();
+      const source = document.getElementById('regSourceInput').value.trim() || '사용자 직접 등록';
+
+      if (!title || !story) {
+        showToast('필수 항목을 입력해 주세요', '유산 이름과 자랑하고 싶은 이야기를 입력해 주세요!', '⚠️');
+        return;
+      }
+
+      const jitterLat = (Math.random() - 0.5) * 0.14;
+      const jitterLng = (Math.random() - 0.5) * 0.14;
+      const newItem = {
+        id: 'U_' + Date.now(),
+        title,
+        regionGroup,
+        location: `${cityLabel} ${townDetail}`.trim(),
+        lat: parseFloat(latStr) + jitterLat,
+        lng: parseFloat(lngStr) + jitterLng,
+        category,
+        subCategory,
+        presetType: state.regPresetType,
+        meshColor: state.regColor,
+        textureDataUrl: state.regTextureDataUrl,
+        hasGoldenAura: true,
+        registrant: { ...state.user },
+        story,
+        source,
+        reactions: { love: 1, proud: 1, visit: 0 },
+        userReacted: { love: false, proud: false, visit: false },
+        comments: [],
+        createdAt: Date.now()
+      };
+
+      state.items.unshift(newItem);
+      state.registeredCountByUser += 1;
+      if (!state.missions.m4_register) {
+        state.missions.m4_register = true;
+      }
+
+      // Reset inputs
+      document.getElementById('regTitleInput').value = '';
+      document.getElementById('regTownDetailInput').value = '';
+      document.getElementById('regStoryInput').value = '';
+      document.getElementById('registerModal').classList.add('hidden');
+
+      // Reset filters so user sees their new marker immediately
+      state.filterCat = 'all';
+      state.filterRegion = 'all';
+      state.searchQuery = '';
+      updateCategoryChipStyles();
+      rebuildMapMarkersAndCards();
+
+      awardPoints(100, '참여 미션 4 완료: 우리 동네 3D 큐레이터!', `[${newItem.title}] 유산이 ✨황금 후광과 함께 3D 지도에 등록되었습니다!`);
+
+      // Fly camera to new item
+      const { x, z } = latLngToMapXZ(newItem.lat, newItem.lng);
+      if (mapControls) {
+        mapControls.target.set(x, 0.5, z);
+      }
+    }
+
+    // =========================================================================
+    // 8. INTRO & ZODIAC LIFECYCLE AVATAR CREATOR UI LOGIC
+    // =========================================================================
+    function renderIntroZodiacCreatorUI() {
+      const currentAnimal = ZODIAC_DATA.find(a => a.id === state.user.animalId) || ZODIAC_DATA[9];
+      const currentStage = currentAnimal.stages.find(s => s.step === Number(state.user.stageStep)) || currentAnimal.stages[0];
+
+      // Live Preview
+      const previewEl = document.getElementById('introAvatarPreview');
+      if (previewEl) {
+        previewEl.innerHTML = renderZodiacAvatarSVG(state.user.animalId, state.user.stageStep, state.user.frameId, state.user.accessoryId);
+      }
+      const titleEl = document.getElementById('introAvatarStageTitle');
+      if (titleEl) titleEl.textContent = currentStage.name;
+      const descEl = document.getElementById('introAvatarStageDesc');
+      if (descEl) descEl.textContent = `${currentAnimal.kr} · ${currentStage.step}단계: ${currentStage.label}`;
+
+      // 1. 12 Zodiac Animals Grid
+      const animalGrid = document.getElementById('zodiacAnimalGrid');
+      if (animalGrid) {
+        animalGrid.innerHTML = '';
+        ZODIAC_DATA.forEach(animal => {
+          const active = animal.id === state.user.animalId;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `py-1.5 px-2 rounded-xl border text-center transition flex flex-col items-center ${
+            active
+              ? 'bg-amber-500/20 border-amber-400 text-white shadow-sm'
+              : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
+          }`;
+          btn.innerHTML = `
+            <span class="text-base">${animal.emoji}</span>
+            <span class="text-[11px] font-bold mt-0.5">${animal.kr}</span>
+          `;
+          btn.addEventListener('click', () => {
+            state.user.animalId = animal.id;
+            renderIntroZodiacCreatorUI();
+          });
+          animalGrid.appendChild(btn);
+        });
+      }
+
+      // 2. 4 Lifecycle Stages Grid (Baby -> Youth -> Adult -> Elder)
+      const stageGrid = document.getElementById('zodiacStageGrid');
+      if (stageGrid) {
+        stageGrid.innerHTML = '';
+        currentAnimal.stages.forEach(st => {
+          const active = st.step === Number(state.user.stageStep);
+          const miniSvg = renderZodiacAvatarSVG(currentAnimal.id, st.step, state.user.frameId, state.user.accessoryId);
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `p-2 rounded-xl border text-left transition flex items-center gap-2 ${
+            active
+              ? 'bg-amber-500/20 border-amber-400 text-white shadow-md'
+              : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
+          }`;
+          btn.innerHTML = `
+            <div class="w-10 h-10 rounded-full overflow-hidden flex-shrink-0 bg-slate-950">${miniSvg}</div>
+            <div class="min-w-0">
+              <div class="text-[10px] font-bold text-amber-300">${st.step}단계 · ${st.label}</div>
+              <div class="text-xs font-extrabold text-white truncate">${st.name}</div>
+            </div>
+          `;
+          btn.addEventListener('click', () => {
+            state.user.stageStep = st.step;
+            renderIntroZodiacCreatorUI();
+          });
+          stageGrid.appendChild(btn);
+        });
+      }
+
+      // 3. Obangsaek Colors
+      const colorGrid = document.getElementById('zodiacColorGrid');
+      if (colorGrid) {
+        colorGrid.innerHTML = '';
+        OBANGSAEK_FRAMES.forEach(fr => {
+          const active = fr.id === state.user.frameId;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.title = fr.name;
+          btn.className = `px-2.5 py-1 rounded-lg border text-[11px] font-bold transition ${
+            active ? 'ring-2 ring-amber-400 text-white' : 'text-slate-300 opacity-80 hover:opacity-100'
+          }`;
+          btn.style.backgroundColor = fr.bg;
+          btn.style.borderColor = fr.border;
+          btn.textContent = fr.name.slice(0, 2);
+          btn.addEventListener('click', () => {
+            state.user.frameId = fr.id;
+            renderIntroZodiacCreatorUI();
+          });
+          colorGrid.appendChild(btn);
+        });
+      }
+
+      // 4. Accessories
+      const accGrid = document.getElementById('zodiacAccessoryGrid');
+      if (accGrid) {
+        accGrid.innerHTML = '';
+        const isFinalUnlocked = state.points >= 150 || Object.values(state.missions).every(Boolean);
+        AVATAR_ACCESSORIES.forEach(acc => {
+          const locked = (acc.unlockMission === 'm1' && !state.missions.m1_stamps) ||
+                         (acc.unlockMission === 'final' && !isFinalUnlocked);
+          const active = acc.id === state.user.accessoryId;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `px-2.5 py-1 rounded-lg border text-[11px] font-bold transition ${
+            active
+              ? 'bg-amber-500 text-slate-950 border-amber-400'
+              : locked
+                ? 'bg-slate-900 border-slate-800 text-slate-500 cursor-not-allowed'
+                : 'bg-slate-900 hover:bg-slate-800 border-slate-700 text-slate-200'
+          }`;
+          btn.textContent = `${acc.name}${locked ? '🔒' : ''}`;
+          btn.addEventListener('click', () => {
+            if (locked) {
+              showToast('전통 장신구 잠금 안내', '미션을 달성하면 전통 갓과 금관·어사화 소품을 장착할 수 있습니다!', '🔒');
+              return;
+            }
+            state.user.accessoryId = acc.id;
+            renderIntroZodiacCreatorUI();
+          });
+          accGrid.appendChild(btn);
+        });
+      }
+    }
+
+    // =========================================================================
+    // 9. MISSION & 3D GUARDIAN PLAQUE MODAL LOGIC
+    // =========================================================================
+    let plaqueScene, plaqueCamera, plaqueRenderer, plaqueAnimId;
+
+    function openMissionModal() {
+      const modal = document.getElementById('missionModal');
+      if (!modal) return;
+      modal.classList.remove('hidden');
+      renderMissionModalUI();
+      setTimeout(() => {
+        initPlaque3DViewer();
+      }, 60);
+    }
+
+    function renderMissionModalUI() {
+      const animal = ZODIAC_DATA.find(a => a.id === state.user.animalId) || ZODIAC_DATA[9];
+      const stage = animal.stages.find(s => s.step === Number(state.user.stageStep)) || animal.stages[0];
+      const lvl = getLevelInfo(state.points);
+
+      document.getElementById('missionUserAvatar').innerHTML = renderZodiacAvatarSVG(
+        state.user.animalId,
+        state.user.stageStep,
+        state.user.frameId,
+        state.user.accessoryId
+      );
+      document.getElementById('missionUserNickname').textContent = state.user.nickname;
+      document.getElementById('missionUserLevelBadge').textContent = lvl.title;
+      document.getElementById('missionUserZodiacText').textContent = `${animal.kr} · ${stage.step}단계 ${stage.name}`;
+      document.getElementById('missionTotalPoints').textContent = `${state.points}P`;
+
+      const pct = Math.min(100, Math.round((state.points / 240) * 100));
+      document.getElementById('missionProgressBar').style.width = `${Math.max(8, pct)}%`;
+
+      const missionDefs = [
+        {
+          done: state.missions.m0_avatar,
+          title: '준비 미션 0: 나만의 십이지신 탄생 (+20P)',
+          desc: '십이지신 동물(12종)과 생애주기(아기~노년 4단계)를 선택해 내 관람자 아이콘 생성'
+        },
+        {
+          done: state.missions.m1_stamps,
+          title: '감상 미션 1: 삼색 국가유산 탐험가 (+50P)',
+          desc: `문화유산(${state.stamps['문화유산'] ? '⭕' : '⚪'}) · 자연유산(${state.stamps['자연유산'] ? '⭕' : '⚪'}) · 무형유산(${state.stamps['무형유산'] ? '⭕' : '⚪'}) 각 1점 이상 3D 감상 (보상: 🎩전통 갓 해금)`
+        },
+        {
+          done: state.missions.m2_reactions,
+          title: `소통 미션 2: 따뜻한 공감의 손길 (건당 +10P / 현재 ${state.reactedItemIds.length}/3점)`,
+          desc: '서로 다른 유산 3점에 감정표현(애정해요·자랑스러워요·가보고 싶어요) 남기기'
+        },
+        {
+          done: state.missions.m3_comments,
+          title: `소통 미션 3: 마을 이야기꾼 (건당 +30P / 현재 ${state.commentCountByUser}/2건)`,
+          desc: '유산 상세 모달에 응원 댓글 2건 이상 남기기 (보상: 🏅우수 관람자 배지)'
+        },
+        {
+          done: state.missions.m4_register,
+          title: `참여 미션 4: 우리 동네 3D 큐레이터 (+100P / 등록 ${state.registeredCountByUser}건)`,
+          desc: '3D 프리셋 커스터마이징 또는 .glb 업로드로 우리 동네 유산 지도에 등록 (보상: ✨황금 후광 마커)'
+        }
+      ];
+
+      const listContainer = document.getElementById('missionListContainer');
+      listContainer.innerHTML = '';
+      missionDefs.forEach(m => {
+        const card = document.createElement('div');
+        card.className = `p-3 rounded-2xl border flex items-center justify-between gap-3 ${
+          m.done ? 'bg-amber-500/10 border-amber-400/50' : 'bg-slate-950/70 border-slate-800'
+        }`;
+        card.innerHTML = `
+          <div>
+            <div class="text-xs font-extrabold ${m.done ? 'text-amber-300' : 'text-white'}">${m.title}</div>
+            <div class="text-[11px] text-slate-400 mt-0.5">${m.desc}</div>
+          </div>
+          <div class="text-xs font-extrabold px-2.5 py-1 rounded-full flex-shrink-0 ${
+            m.done ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-slate-400'
+          }">
+            ${m.done ? '달성 완료 ✓' : '진행 중'}
+          </div>
+        `;
+        listContainer.appendChild(card);
+      });
+
+      const unlocked = state.points >= 150 || Object.values(state.missions).every(Boolean);
+      const lockOverlay = document.getElementById('plaqueLockedOverlay');
+      const lockBadge = document.getElementById('plaqueLockBadge');
+      if (unlocked) {
+        lockOverlay.classList.add('hidden');
+        lockBadge.textContent = '✨ 수호패 해금 완료!';
+        lockBadge.className = 'text-[11px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/50 font-bold';
+      } else {
+        lockOverlay.classList.remove('hidden');
+        lockBadge.textContent = `🔒 ${150 - state.points}P 더 모으면 해금`;
+        lockBadge.className = 'text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700';
+      }
+
+      document.getElementById('certHolderName').textContent = `${state.user.nickname} (${lvl.title})`;
+      document.getElementById('certHolderZodiac').textContent = `수호 상징: ${animal.kr} · ${stage.name}`;
+    }
+
+    function initPlaque3DViewer() {
+      const container = document.getElementById('plaque3DCanvasContainer');
+      if (!container) return;
+      if (plaqueAnimId) cancelAnimationFrame(plaqueAnimId);
+
+      const w = container.clientWidth || 300;
+      const h = container.clientHeight || 220;
+
+      plaqueScene = new THREE.Scene();
+      plaqueScene.background = new THREE.Color(0x090d16);
+
+      plaqueCamera = new THREE.PerspectiveCamera(40, w / h, 0.1, 100);
+      plaqueCamera.position.set(0, 0.4, 3.8);
+
+      plaqueRenderer = new THREE.WebGLRenderer({ antialias: true });
+      plaqueRenderer.setSize(w, h);
+      plaqueRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      container.innerHTML = '';
+      container.appendChild(plaqueRenderer.domElement);
+
+      const controls = new THREE.OrbitControls(plaqueCamera, plaqueRenderer.domElement);
+      controls.enableDamping = true;
+      controls.autoRotate = true;
+      controls.autoRotateSpeed = 3.0;
+
+      plaqueScene.add(new THREE.AmbientLight(0xffffff, 0.9));
+      const dLight = new THREE.DirectionalLight(0xfde047, 1.4);
+      dLight.position.set(3, 5, 5);
+      plaqueScene.add(dLight);
+
+      // 3D Golden Guardian Medallion Plaque
+      const medalGroup = new THREE.Group();
+      const goldMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.85, roughness: 0.2 });
+      const jadeMat = new THREE.MeshStandardMaterial({ color: 0x10b981, metalness: 0.3, roughness: 0.3 });
+
+      const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.16, 32), goldMat);
+      disc.rotation.x = Math.PI / 2;
+      medalGroup.add(disc);
+
+      const innerCore = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.72, 0.2, 24), jadeMat);
+      innerCore.rotation.x = Math.PI / 2;
+      medalGroup.add(innerCore);
+
+      const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 0), goldMat);
+      medalGroup.add(star);
+
+      const outerHalo = new THREE.Mesh(
+        new THREE.TorusGeometry(1.25, 0.04, 12, 48),
+        new THREE.MeshBasicMaterial({ color: 0xfef08a })
+      );
+      medalGroup.add(outerHalo);
+
+      plaqueScene.add(medalGroup);
+
+      function animatePlaque() {
+        plaqueAnimId = requestAnimationFrame(animatePlaque);
+        controls.update();
+        plaqueRenderer.render(plaqueScene, plaqueCamera);
+      }
+      animatePlaque();
+    }
+
+    function downloadCertificateImage() {
+      const animal = ZODIAC_DATA.find(a => a.id === state.user.animalId) || ZODIAC_DATA[9];
+      const stage = animal.stages.find(s => s.step === Number(state.user.stageStep)) || animal.stages[0];
+      const lvl = getLevelInfo(state.points);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 720;
+      canvas.height = 440;
+      const ctx = canvas.getContext('2d');
+
+      // Background
+      const grad = ctx.createLinearGradient(0, 0, 720, 440);
+      grad.addColorStop(0, '#0f172a');
+      grad.addColorStop(1, '#1e1b4b');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 720, 440);
+
+      // Golden Border
+      ctx.strokeStyle = '#facc15';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(20, 20, 680, 400);
+
+      ctx.fillStyle = '#fde047';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('KOREA NATIONAL HERITAGE 3D EXHIBITION CERTIFICATE', 360, 75);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 32px sans-serif';
+      ctx.fillText('국가유산 디지털 명예 수호패', 360, 125);
+
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = 'bold 24px sans-serif';
+      ctx.fillText(`수호자: ${state.user.nickname} (${lvl.title})`, 360, 195);
+
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = '18px sans-serif';
+      ctx.fillText(`십이지신 생애주기 아이콘: ${animal.kr} · ${stage.step}단계 [${stage.name}]`, 360, 245);
+      ctx.fillText(`누적 탐험 점수: ${state.points}P | 삼색 도감 스탬프 달성`, 360, 285);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '14px sans-serif';
+      ctx.fillText('발급일: 2026. 11. 13. · 지도 위에 피어나는 우리 동네 보물창고', 360, 360);
+
+      const link = document.createElement('a');
+      link.download = `국가유산수호패_${state.user.nickname}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      showToast('디지털 인증서 이미지 저장 완료!', '내 십이지신 캐릭터와 닉네임이 새겨진 수호패가 저장되었습니다.', '📥');
+    }
+
+    // =========================================================================
+    // 10. GLOBAL HEADER & EVENT LISTENERS BINDING
+    // =========================================================================
+    function updateHeaderAndGamificationUI() {
+      const avatarContainer = document.getElementById('headerAvatarContainer');
+      if (avatarContainer) {
+        avatarContainer.innerHTML = renderZodiacAvatarSVG(
+          state.user.animalId,
+          state.user.stageStep,
+          state.user.frameId,
+          state.user.accessoryId
+        );
+      }
+      document.getElementById('headerUserNickname').textContent = state.user.nickname;
+      const lvl = getLevelInfo(state.points);
+      document.getElementById('headerUserLevel').textContent = lvl.title;
+      document.getElementById('headerUserPoints').textContent = `${state.points}P`;
+
+      const exBadge = document.getElementById('headerExcellenceBadge');
+      if (state.missions.m3_comments) exBadge.classList.remove('hidden');
+      else exBadge.classList.add('hidden');
+
+      // Stamps
+      const sCult = document.getElementById('stampCultural');
+      const sNat = document.getElementById('stampNatural');
+      const sInt = document.getElementById('stampIntangible');
+      if (sCult) {
+        sCult.textContent = `문화${state.stamps['문화유산'] ? '⭕' : '⚪'}`;
+        sCult.className = `text-[11px] px-1.5 py-0.5 rounded font-semibold ${state.stamps['문화유산'] ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-slate-700 text-slate-400'}`;
+      }
+      if (sNat) {
+        sNat.textContent = `자연${state.stamps['자연유산'] ? '⭕' : '⚪'}`;
+        sNat.className = `text-[11px] px-1.5 py-0.5 rounded font-semibold ${state.stamps['자연유산'] ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-700 text-slate-400'}`;
+      }
+      if (sInt) {
+        sInt.textContent = `무형${state.stamps['무형유산'] ? '⭕' : '⚪'}`;
+        sInt.className = `text-[11px] px-1.5 py-0.5 rounded font-semibold ${state.stamps['무형유산'] ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-slate-700 text-slate-400'}`;
+      }
+
+      const completedCount = Object.values(state.missions).filter(Boolean).length;
+      const badgeEl = document.getElementById('missionBadgeCount');
+      if (badgeEl) badgeEl.textContent = `${completedCount}/5`;
+    }
+
+    function updateCategoryChipStyles() {
+      document.querySelectorAll('.cat-chip').forEach(btn => {
+        const cat = btn.getAttribute('data-cat');
+        if (cat === state.filterCat) {
+          btn.className = 'cat-chip px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-500 text-slate-950 transition';
+        } else {
+          btn.className = 'cat-chip px-2.5 py-1 rounded-md text-xs font-semibold text-slate-300 hover:text-white transition';
+        }
+      });
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      loadSavedState();
+      renderIntroZodiacCreatorUI();
+      updateHeaderAndGamificationUI();
+      initMain3DMap();
+
+      // If user already completed intro earlier in localStorage, still allow them to see or close it easily
+      document.getElementById('introNicknameInput').value = state.user.nickname;
+
+      // Intro Modal Actions
+      document.getElementById('introNicknameInput').addEventListener('input', (e) => {
+        state.user.nickname = e.target.value.trim() || '우리동네탐험가';
+      });
+
+      document.getElementById('btnConfirmIntroStart').addEventListener('click', () => {
+        const nick = document.getElementById('introNicknameInput').value.trim();
+        state.user.nickname = nick || '우리동네탐험가';
+        document.getElementById('introModal').classList.add('hidden');
+        if (!state.missions.m0_avatar) {
+          state.missions.m0_avatar = true;
+          awardPoints(20, '준비 미션 0 완료: 나만의 십이지신 탄생!', `${state.user.nickname} 님의 십이지신 생애주기 캐릭터가 설정되었습니다.`);
+        } else {
+          saveState();
+          updateHeaderAndGamificationUI();
+          showToast('캐릭터 설정 업데이트 완료', '선택하신 십이지신 생애주기 아이콘이 적용되었습니다.', '🐾');
+        }
+      });
+
+      document.getElementById('btnCloseIntroModal').addEventListener('click', () => {
+        document.getElementById('introModal').classList.add('hidden');
+      });
+
+      document.getElementById('btnQuickRegisterFromIntro').addEventListener('click', () => {
+        document.getElementById('introModal').classList.add('hidden');
+        if (!state.missions.m0_avatar) {
+          state.missions.m0_avatar = true;
+          awardPoints(20, '준비 미션 0 완료', '십이지신 캐릭터가 자동 생성되었습니다.');
+        }
+        openRegisterModal();
+      });
+
+      document.getElementById('btnOpenIntroCharacter').addEventListener('click', () => {
+        renderIntroZodiacCreatorUI();
+        document.getElementById('introModal').classList.remove('hidden');
+      });
+
+      document.getElementById('btnOpenProfileModal').addEventListener('click', () => {
+        renderIntroZodiacCreatorUI();
+        document.getElementById('introModal').classList.remove('hidden');
+      });
+
+      // Search & Filters
+      const searchInput = document.getElementById('searchInput');
+      const btnClearSearch = document.getElementById('btnClearSearch');
+      searchInput.addEventListener('input', (e) => {
+        state.searchQuery = e.target.value;
+        btnClearSearch.classList.toggle('hidden', !state.searchQuery);
+        rebuildMapMarkersAndCards();
+      });
+      btnClearSearch.addEventListener('click', () => {
+        state.searchQuery = '';
+        searchInput.value = '';
+        btnClearSearch.classList.add('hidden');
+        rebuildMapMarkersAndCards();
+      });
+
+      document.querySelectorAll('.cat-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.filterCat = btn.getAttribute('data-cat');
+          updateCategoryChipStyles();
+          rebuildMapMarkersAndCards();
+        });
+      });
+
+      document.getElementById('regionSelect').addEventListener('change', (e) => {
+        state.filterRegion = e.target.value;
+        rebuildMapMarkersAndCards();
+      });
+
+      document.getElementById('sortSelect').addEventListener('change', (e) => {
+        state.sortBy = e.target.value;
+        rebuildMapMarkersAndCards();
+      });
+
+      // Map Controls
+      document.getElementById('btnResetMapCamera').addEventListener('click', () => {
+        if (mapCamera && mapControls) {
+          mapCamera.position.set(0, 18, 22);
+          mapControls.target.set(0, 0, 0);
+        }
+      });
+
+      document.getElementById('btnToggleMapAutoRotate').addEventListener('click', (e) => {
+        mapAutoRotate = !mapAutoRotate;
+        if (mapControls) mapControls.autoRotate = mapAutoRotate;
+        e.currentTarget.textContent = `🔄 지도 회전: ${mapAutoRotate ? '켜짐' : '꺼짐'}`;
+      });
+
+      // Slider buttons
+      document.getElementById('btnSlidePrev').addEventListener('click', () => {
+        document.getElementById('heritageCardsSlider').scrollBy({ left: -280, behavior: 'smooth' });
+      });
+      document.getElementById('btnSlideNext').addEventListener('click', () => {
+        document.getElementById('heritageCardsSlider').scrollBy({ left: 280, behavior: 'smooth' });
+      });
+
+      // Detail Modal Controls
+      document.getElementById('btnCloseDetailModal').addEventListener('click', () => {
+        document.getElementById('detailModal').classList.add('hidden');
+      });
+
+      document.getElementById('btnDetailToggleRotate').addEventListener('click', (e) => {
+        detailAutoRotate = !detailAutoRotate;
+        if (detailControls) detailControls.autoRotate = detailAutoRotate;
+        e.currentTarget.textContent = `🔄 자동 회전: ${detailAutoRotate ? '켜짐' : '꺼짐'}`;
+      });
+
+      document.getElementById('btnDetailLightMood').addEventListener('click', (e) => {
+        detailLightMode = (detailLightMode + 1) % 3;
+        if (!detailScene || !detailAmbientLight || !detailDirLight) return;
+        if (detailLightMode === 0) {
+          detailScene.background.setHex(0x050914);
+          detailAmbientLight.intensity = 0.85;
+          detailDirLight.color.setHex(0xfef08a);
+          e.currentTarget.textContent = '💡 조명: 주간 자연광';
+        } else if (detailLightMode === 1) {
+          detailScene.background.setHex(0x020617);
+          detailAmbientLight.intensity = 0.4;
+          detailDirLight.color.setHex(0x38bdf8);
+          e.currentTarget.textContent = '🌙 조명: 야간 달빛';
+        } else {
+          detailScene.background.setHex(0x18181b);
+          detailAmbientLight.intensity = 0.55;
+          detailDirLight.color.setHex(0xfbbf24);
+          e.currentTarget.textContent = '🏛️ 조명: 박물관 핀조명';
+        }
+      });
+
+      document.getElementById('btnDetailResetCam').addEventListener('click', () => {
+        if (detailCamera && detailControls) {
+          detailCamera.position.set(0, 2.4, 4.8);
+          detailControls.target.set(0, 1.15, 0);
+        }
+      });
+
+      document.getElementById('btnReactLove').addEventListener('click', () => handleReactionClick('love'));
+      document.getElementById('btnReactProud').addEventListener('click', () => handleReactionClick('proud'));
+      document.getElementById('btnReactVisit').addEventListener('click', () => handleReactionClick('visit'));
+
+      document.getElementById('btnSubmitComment').addEventListener('click', handleAddComment);
+      document.getElementById('commentInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleAddComment();
+      });
+
+      // Registration Modal Controls
+      document.getElementById('btnOpenRegisterModal').addEventListener('click', openRegisterModal);
+      document.getElementById('btnCloseRegisterModal').addEventListener('click', () => {
+        document.getElementById('registerModal').classList.add('hidden');
+      });
+
+      document.getElementById('tabModePreset').addEventListener('click', () => {
+        state.regMode = 'preset';
+        document.getElementById('tabModePreset').className = 'py-2 px-3 rounded-lg text-xs font-extrabold bg-amber-500 text-slate-950 transition';
+        document.getElementById('tabModeGlb').className = 'py-2 px-3 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition';
+        document.getElementById('panelModePreset').classList.remove('hidden');
+        document.getElementById('panelModeGlb').classList.add('hidden');
+        refreshRegister3DPreviewMesh();
+      });
+
+      document.getElementById('tabModeGlb').addEventListener('click', () => {
+        state.regMode = 'glb';
+        document.getElementById('tabModeGlb').className = 'py-2 px-3 rounded-lg text-xs font-extrabold bg-amber-500 text-slate-950 transition';
+        document.getElementById('tabModePreset').className = 'py-2 px-3 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition';
+        document.getElementById('panelModeGlb').classList.remove('hidden');
+        document.getElementById('panelModePreset').classList.add('hidden');
+        refreshRegister3DPreviewMesh();
+      });
+
+      document.getElementById('presetTextureInput').addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          state.regTextureDataUrl = ev.target.result;
+          refreshRegister3DPreviewMesh();
+          showToast('사진 텍스처 매핑 완료', '3D 오브젝트에 대표 이미지 텍스처가 적용되었습니다.', '🖼️');
+        };
+        reader.readAsDataURL(file);
+      });
+
+      document.getElementById('glbFileInput').addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const statusEl = document.getElementById('glbUploadStatus');
+        statusEl.textContent = `⏳ [${file.name}] 3D 모델을 불러오는 중...`;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const loader = new THREE.GLTFLoader();
+            loader.parse(ev.target.result, '', (gltf) => {
+              const model = gltf.scene;
+              const box = new THREE.Box3().setFromObject(model);
+              const size = box.getSize(new THREE.Vector3());
+              const maxDim = Math.max(size.x, size.y, size.z) || 1;
+              const scale = 1.8 / maxDim;
+              model.scale.set(scale, scale, scale);
+              model.position.set(0, 0.8, 0);
+              state.regUploadedGlbScene = model;
+              refreshRegister3DPreviewMesh();
+              statusEl.textContent = `✅ [${file.name}] 3D 모델 로드 및 크기 정규화 완료!`;
+              showToast('.glb 3D 모델 업로드 성공!', `${file.name} 모델이 미리보기에 반영되었습니다.`, '📦');
+            }, () => {
+              statusEl.textContent = '⚠️ 파일 파싱 중 오류가 발생해 기본 3D 프리셋으로 대체됩니다.';
+            });
+          } catch (err) {
+            statusEl.textContent = '⚠️ GLTF 로더 처리 중 오류가 발생했습니다.';
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      });
+
+      document.getElementById('btnSubmitHeritage').addEventListener('click', handleSubmitHeritageRegistration);
+
+      // Mission & Reward Modal Controls
+      document.getElementById('btnOpenMissionModal').addEventListener('click', openMissionModal);
+      document.getElementById('btnCloseMissionModal').addEventListener('click', () => {
+        document.getElementById('missionModal').classList.add('hidden');
+      });
+      document.getElementById('btnChangeAvatarFromMission').addEventListener('click', () => {
+        document.getElementById('missionModal').classList.add('hidden');
+        renderIntroZodiacCreatorUI();
+        document.getElementById('introModal').classList.remove('hidden');
+      });
+      document.getElementById('btnDownloadCertificate').addEventListener('click', downloadCertificateImage);
+
+      // Sources & Todo Modal Controls
+      document.getElementById('btnOpenSourcesModal').addEventListener('click', () => {
+        document.getElementById('sourcesModal').classList.remove('hidden');
+      });
+      document.getElementById('btnCloseSourcesModal').addEventListener('click', () => {
+        document.getElementById('sourcesModal').classList.add('hidden');
+      });
+    });
+  </script>
+</body>
+</html>
